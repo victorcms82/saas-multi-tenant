@@ -1,0 +1,11 @@
+{
+  "name": "plataforma-agentes-ia-evolute",
+  "version": "1.0.0",
+  "description": "Plataforma SaaS multi-tenant de agentes IA",
+  "author": "Victor Castro <victor@evolutedigital.com.br>",
+  "private": true,
+  "scripts": {
+    "dev": "nodemon index.js",
+    "start": "node index.js"
+  }
+}
