@@ -16,33 +16,63 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Setup Supabase CLI
-        uses: supabase/setup-cli@v1
-        with:
-          version: latest
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client
 
-      - name: Run migrations
+      - name: Run Migration 001
         env:
-          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
           SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
           SUPABASE_PROJECT_ID: ${{ secrets.SUPABASE_PROJECT_ID }}
         run: |
-          echo "🚀 Iniciando migrations..."
+          echo "🚀 Migration 001: Creating agents table..."
           
-          # Link to Supabase project
-          supabase link --project-ref $SUPABASE_PROJECT_ID
+          # Construct connection string
+          DB_URL="postgresql://postgres.${SUPABASE_PROJECT_ID}:${SUPABASE_DB_PASSWORD}@aws-0-us-east-1.pooler.supabase.com:6543/postgres"
           
-          # Run migrations in order
-          echo "📦 Migration 001: Creating agents table..."
-          supabase db push
+          # Run migration
+          psql "$DB_URL" -f database/migrations/001_add_agents_table_CUSTOM.sql
           
-          echo "✅ Migrations completed successfully!"
+          echo "✅ Migration 001 completed!"
 
-      - name: Validate migrations
+      - name: Run Migration 002
         env:
-          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
           SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
           SUPABASE_PROJECT_ID: ${{ secrets.SUPABASE_PROJECT_ID }}
         run: |
-          echo "🔍 Validating database integrity..."
-          supabase db push --dry-run
+          echo "🏪 Migration 002: Creating marketplace tables..."
+          
+          DB_URL="postgresql://postgres.${SUPABASE_PROJECT_ID}:${SUPABASE_DB_PASSWORD}@aws-0-us-east-1.pooler.supabase.com:6543/postgres"
+          
+          psql "$DB_URL" -f database/migrations/002_add_marketplace_tables.sql
+          
+          echo "✅ Migration 002 completed!"
+
+      - name: Run Migration 003 - Validation
+        env:
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+          SUPABASE_PROJECT_ID: ${{ secrets.SUPABASE_PROJECT_ID }}
+        run: |
+          echo "🔍 Migration 003: Validating system integrity..."
+          
+          DB_URL="postgresql://postgres.${SUPABASE_PROJECT_ID}:${SUPABASE_DB_PASSWORD}@aws-0-us-east-1.pooler.supabase.com:6543/postgres"
+          
+          psql "$DB_URL" -f database/migrations/003_validate_system.sql
+          
+          echo "✅ Validation completed!"
+
+      - name: Summary
+        run: |
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "✅ All migrations completed successfully!"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo ""
+          echo "📊 What was created:"
+          echo "  • Table: agents (multi-agent support)"
+          echo "  • Tables: 6 marketplace tables"
+          echo "  • Templates: 4 initial templates"
+          echo "  • Functions: 12 business functions"
+          echo "  • Views: 4 useful views (including profitability)"
+          echo ""
+          echo "🎯 Next: Test queries in Supabase SQL Editor"
