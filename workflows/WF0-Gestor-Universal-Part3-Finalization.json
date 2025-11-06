@@ -1,0 +1,608 @@
+{
+  "name": "WF 0: Gestor Universal - Part 3 (Finalization)",
+  "nodes": [
+    {
+      "parameters": {
+        "jsCode": "// Collect all tool results and prepare final response\nconst llmResponse = $('Process LLM Response').item.json;\nconst toolResults = $input.all();\n\n// If no tool calls, use direct response\nif (!llmResponse.has_tool_calls) {\n  return {\n    final_response: llmResponse.response_text,\n    tool_results: [],\n    total_cost_usd: llmResponse.cost_usd,\n    usage: llmResponse.usage,\n    llm_provider: llmResponse.llm_provider,\n    llm_model: llmResponse.llm_model\n  };\n}\n\n// Build tool results for second LLM call\nconst toolMessages = toolResults.map(tr => ({\n  role: 'tool',\n  tool_call_id: tr.json.tool_call_id,\n  name: tr.json.tool_name,\n  content: tr.json.tool_result\n}));\n\nreturn {\n  needs_second_llm_call: true,\n  tool_messages: toolMessages,\n  tool_results: toolResults.map(tr => tr.json),\n  first_llm_response: llmResponse\n};"
+      },
+      "id": "collect-tool-results",
+      "name": "Collect Tool Results",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [7250, 500]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.needs_second_llm_call }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "needs-second-call-if",
+      "name": "Needs Second LLM Call?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [7450, 500]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Prepare second LLM call with tool results\nconst context = $('Build Context Window').item.json;\nconst firstResponse = $input.item.json.first_llm_response;\nconst toolMessages = $input.item.json.tool_messages;\n\n// Rebuild messages with first assistant response and tool results\nconst messages = [\n  ...context.messages,\n  {\n    role: 'assistant',\n    content: firstResponse.response_text || null,\n    tool_calls: firstResponse.tool_calls\n  },\n  ...toolMessages\n];\n\n// Remove tools from second call (already executed)\nreturn {\n  messages,\n  tools: [],\n  llm_provider: context.llm_provider,\n  llm_model: context.llm_model,\n  llm_config: context.llm_config,\n  is_second_call: true\n};"
+      },
+      "id": "prepare-second-llm",
+      "name": "Prepare Second LLM Call",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [7450, 700]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Convert to Vertex AI format for second call\nconst context = $input.item.json;\nconst llmConfig = context.llm_config || {};\n\nconst endpoint = `https://us-central1-aiplatform.googleapis.com/v1/projects/n8n-evolute/locations/us-central1/publishers/google/models/${context.llm_model}:generateContent`;\n\n// Convert messages\nconst contents = [];\nlet systemInstruction = '';\n\ncontext.messages.forEach(msg => {\n  if (msg.role === 'system') {\n    systemInstruction += msg.content + '\\n';\n  } else if (msg.role === 'tool') {\n    // Convert tool messages to Gemini format\n    contents.push({\n      role: 'function',\n      parts: [{\n        functionResponse: {\n          name: msg.name,\n          response: {\n            content: msg.content\n          }\n        }\n      }]\n    });\n  } else {\n    contents.push({\n      role: msg.role === 'assistant' ? 'model' : 'user',\n      parts: [{ text: msg.content || '' }]\n    });\n  }\n});\n\nconst requestBody = {\n  contents,\n  systemInstruction: systemInstruction ? {\n    parts: [{ text: systemInstruction }]\n  } : undefined,\n  generationConfig: {\n    temperature: llmConfig.temperature || 0.7,\n    topP: llmConfig.top_p || 0.95,\n    maxOutputTokens: llmConfig.max_tokens || 2048\n  }\n};\n\nreturn {\n  endpoint,\n  request_body: requestBody,\n  llm_model: context.llm_model\n};"
+      },
+      "id": "prepare-second-vertex",
+      "name": "Prepare Second Vertex Call",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [7650, 700]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.endpoint }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "oAuth2Api",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.request_body) }}",
+        "options": {}
+      },
+      "id": "call-second-vertex",
+      "name": "Call Vertex AI (Second)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [7850, 700],
+      "credentials": {
+        "oAuth2Api": {
+          "id": "google-vertex-ai-oauth",
+          "name": "Google Vertex AI OAuth"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Process second LLM response\nconst llmResponse = $input.item.json;\nconst toolResults = $('Collect Tool Results').item.json;\nconst firstResponse = toolResults.first_llm_response;\n\nconst candidate = llmResponse.candidates?.[0];\nif (!candidate) {\n  throw new Error('No candidates in second Gemini response');\n}\n\nconst responseText = candidate.content.parts\n  .map(p => p.text)\n  .filter(t => t)\n  .join('');\n\nconst usage = {\n  prompt_tokens: llmResponse.usageMetadata?.promptTokenCount || 0,\n  completion_tokens: llmResponse.usageMetadata?.candidatesTokenCount || 0,\n  total_tokens: llmResponse.usageMetadata?.totalTokenCount || 0\n};\n\n// Calculate total cost (first + second call)\nconst secondCost = (usage.prompt_tokens * 0.075 / 1000000) + \n                   (usage.completion_tokens * 0.30 / 1000000);\n\nconst totalCost = firstResponse.cost_usd + secondCost;\n\nreturn {\n  final_response: responseText,\n  tool_results: toolResults.tool_results,\n  total_cost_usd: parseFloat(totalCost.toFixed(6)),\n  usage: {\n    first_call: firstResponse.usage,\n    second_call: usage,\n    total_tokens: firstResponse.usage.total_tokens + usage.total_tokens\n  },\n  llm_provider: 'google',\n  llm_model: $('Prepare Second Vertex Call').item.json.llm_model,\n  calls_made: 2\n};"
+      },
+      "id": "process-second-response",
+      "name": "Process Second Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [8050, 700]
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combinationMode": "mergeByPosition",
+        "options": {}
+      },
+      "id": "merge-final-response",
+      "name": "Merge Final Response",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 2.1,
+      "position": [8250, 500]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Save conversation to Redis\nconst finalResponse = $input.item.json;\nconst extractData = $('Extract & Validate').item.json;\nconst combinedMsg = $('Combine Messages').item.json;\n\nconst clientId = extractData.client_id;\nconst conversationId = extractData.conversation_id;\n\n// Prepare user message\nconst userMessage = {\n  role: 'user',\n  content: combinedMsg.combined_message,\n  timestamp: new Date().toISOString()\n};\n\n// Prepare assistant message\nconst assistantMessage = {\n  role: 'assistant',\n  content: finalResponse.final_response,\n  timestamp: new Date().toISOString(),\n  tools_used: finalResponse.tool_results?.map(tr => tr.tool_name) || [],\n  tokens: finalResponse.usage?.total_tokens || 0\n};\n\nreturn {\n  client_id: clientId,\n  conversation_id: conversationId,\n  history_key: `history:${clientId}:${conversationId}`,\n  memory_key: `memory:${clientId}:${conversationId}`,\n  user_message: JSON.stringify(userMessage),\n  assistant_message: JSON.stringify(assistantMessage)\n};"
+      },
+      "id": "prepare-memory-save",
+      "name": "Prepare Memory Save",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [8450, 500]
+    },
+    {
+      "parameters": {
+        "operation": "lpush",
+        "key": "={{ $json.history_key }}",
+        "value": "={{ $json.user_message }}",
+        "options": {
+          "dbNumber": 1
+        }
+      },
+      "id": "save-user-message",
+      "name": "Save User Message to History",
+      "type": "n8n-nodes-base.redis",
+      "typeVersion": 1,
+      "position": [8650, 400],
+      "credentials": {
+        "redis": {
+          "id": "redis-main",
+          "name": "Redis Main"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "lpush",
+        "key": "={{ $('Prepare Memory Save').item.json.history_key }}",
+        "value": "={{ $('Prepare Memory Save').item.json.assistant_message }}",
+        "options": {
+          "dbNumber": 1
+        }
+      },
+      "id": "save-assistant-message",
+      "name": "Save Assistant Message to History",
+      "type": "n8n-nodes-base.redis",
+      "typeVersion": 1,
+      "position": [8650, 550],
+      "credentials": {
+        "redis": {
+          "id": "redis-main",
+          "name": "Redis Main"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "command": "LTRIM",
+        "key": "={{ $('Prepare Memory Save').item.json.history_key }}",
+        "values": "0,49",
+        "options": {
+          "dbNumber": 1
+        }
+      },
+      "id": "trim-history",
+      "name": "Trim History (Keep 50)",
+      "type": "n8n-nodes-base.redis",
+      "typeVersion": 1,
+      "position": [8850, 500],
+      "credentials": {
+        "redis": {
+          "id": "redis-main",
+          "name": "Redis Main"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "command": "HINCRBY",
+        "key": "={{ $('Prepare Memory Save').item.json.memory_key }}",
+        "field": "interaction_count",
+        "increment": 1,
+        "options": {
+          "dbNumber": 1
+        }
+      },
+      "id": "increment-interaction",
+      "name": "Increment Interaction Count",
+      "type": "n8n-nodes-base.redis",
+      "typeVersion": 1,
+      "position": [9050, 500],
+      "credentials": {
+        "redis": {
+          "id": "redis-main",
+          "name": "Redis Main"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "command": "HSET",
+        "key": "={{ $('Prepare Memory Save').item.json.memory_key }}",
+        "field": "last_interaction",
+        "value": "={{ new Date().toISOString() }}",
+        "options": {
+          "dbNumber": 1
+        }
+      },
+      "id": "update-last-interaction",
+      "name": "Update Last Interaction",
+      "type": "n8n-nodes-base.redis",
+      "typeVersion": 1,
+      "position": [9250, 500],
+      "credentials": {
+        "redis": {
+          "id": "redis-main",
+          "name": "Redis Main"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "command": "EXPIRE",
+        "key": "={{ $('Prepare Memory Save').item.json.memory_key }}",
+        "ttl": 2592000,
+        "options": {
+          "dbNumber": 1
+        }
+      },
+      "id": "set-memory-ttl",
+      "name": "Set Memory TTL (30 days)",
+      "type": "n8n-nodes-base.redis",
+      "typeVersion": 1,
+      "position": [9450, 500],
+      "credentials": {
+        "redis": {
+          "id": "redis-main",
+          "name": "Redis Main"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO public.agent_executions (\n  client_id,\n  conversation_id,\n  contact_id,\n  channel_type,\n  user_message,\n  user_message_type,\n  system_prompt_used,\n  llm_provider,\n  llm_model,\n  llm_config,\n  conversation_history,\n  tools_called,\n  agent_response,\n  total_latency_ms,\n  llm_latency_ms,\n  prompt_tokens,\n  completion_tokens,\n  total_tokens,\n  llm_cost_usd,\n  total_cost_usd,\n  status,\n  n8n_workflow_id,\n  n8n_execution_id\n) VALUES (\n  '{{ $('Extract & Validate').item.json.client_id }}',\n  '{{ $('Extract & Validate').item.json.conversation_id }}',\n  '{{ $('Extract & Validate').item.json.contact_id }}',\n  '{{ $('Extract & Validate').item.json.channel_type }}',\n  '{{ $('Combine Messages').item.json.combined_message }}',\n  '{{ $('Extract & Validate').item.json.user_message_type }}',\n  '{{ $('Load Client Config').item.json.system_prompt }}',\n  '{{ $('Merge Final Response').item.json.llm_provider }}',\n  '{{ $('Merge Final Response').item.json.llm_model }}',\n  '{{ JSON.stringify($('Load Client Config').item.json.llm_config) }}'::jsonb,\n  '{{ JSON.stringify($('Build Context Window').item.json.messages) }}'::jsonb,\n  '{{ JSON.stringify($('Merge Final Response').item.json.tool_results || []) }}'::jsonb,\n  '{{ $('Merge Final Response').item.json.final_response }}',\n  {{ Date.now() - new Date($('Extract & Validate').item.json.timestamp).getTime() }},\n  0,\n  {{ $('Merge Final Response').item.json.usage?.total_tokens || 0 }},\n  {{ $('Merge Final Response').item.json.usage?.completion_tokens || 0 }},\n  {{ $('Merge Final Response').item.json.usage?.total_tokens || 0 }},\n  {{ $('Merge Final Response').item.json.total_cost_usd || 0 }},\n  {{ $('Merge Final Response').item.json.total_cost_usd || 0 }},\n  'success',\n  '{{ $workflow.id }}',\n  '{{ $execution.id }}'\n) RETURNING id;",
+        "options": {}
+      },
+      "id": "log-execution",
+      "name": "Log Execution to DB",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [9650, 500],
+      "credentials": {
+        "postgres": {
+          "id": "supabase-main",
+          "name": "Supabase Main DB"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT increment_client_usage(\n  p_client_id := '{{ $('Extract & Validate').item.json.client_id }}',\n  p_tokens_in := {{ $('Merge Final Response').item.json.usage?.prompt_tokens || 0 }},\n  p_tokens_out := {{ $('Merge Final Response').item.json.usage?.completion_tokens || 0 }},\n  p_images := 0,\n  p_rag_searches := {{ ($('Merge Final Response').item.json.tool_results || []).filter(t => t.tool_name === 'rag_search').length }},\n  p_cost_usd := {{ $('Merge Final Response').item.json.total_cost_usd || 0 }}\n);",
+        "options": {}
+      },
+      "id": "update-usage",
+      "name": "Update Client Usage",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [9850, 500],
+      "credentials": {
+        "postgres": {
+          "id": "supabase-main",
+          "name": "Supabase Main DB"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Route to correct channel sender\nconst extractData = $('Extract & Validate').item.json;\nconst finalResponse = $('Merge Final Response').item.json;\nconst config = $('Load Client Config').item.json;\n\nconst channelType = extractData.channel_type;\nconst conversationId = extractData.conversation_id;\nconst responseText = finalResponse.final_response;\n\nreturn {\n  channel_type: channelType,\n  conversation_id: conversationId,\n  response_text: responseText,\n  config: config,\n  metadata: extractData\n};"
+      },
+      "id": "route-channel",
+      "name": "Route to Channel",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [10050, 500]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "string": [
+            {
+              "value1": "={{ $json.channel_type }}",
+              "value2": "chatwoot"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "channel-switch",
+      "name": "Channel Switch",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [10250, 500]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Route to Channel').item.json.config.chatwoot_host }}/api/v1/accounts/{{ $('Route to Channel').item.json.config.chatwoot_account_id }}/conversations/{{ $('Route to Channel').item.json.conversation_id }}/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({\n  content: $('Route to Channel').item.json.response_text,\n  message_type: 'outgoing',\n  private: false\n}) }}",
+        "options": {}
+      },
+      "id": "send-chatwoot",
+      "name": "Send to Chatwoot",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [10450, 300],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "chatwoot-api-token",
+          "name": "Chatwoot API Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Route to Channel').item.json.config.evolution_webhook_url }}/message/sendText/{{ $('Route to Channel').item.json.metadata.whatsapp_metadata.instance }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({\n  number: $('Route to Channel').item.json.conversation_id,\n  text: $('Route to Channel').item.json.response_text\n}) }}",
+        "options": {}
+      },
+      "id": "send-whatsapp",
+      "name": "Send to WhatsApp (Evolution)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [10450, 500],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "evolution-api-token",
+          "name": "Evolution API Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "content": "## Finalization Flow\n\n### Completed:\n1. ✅ Collect Tool Results\n2. ✅ Second LLM Call (if needed)\n3. ✅ Save to Redis:\n   - Conversation History\n   - Memory/Context\n4. ✅ Log to Supabase:\n   - agent_executions\n   - client_usage\n5. ✅ Send Response to Channel:\n   - Chatwoot\n   - WhatsApp (Evolution)\n   - Instagram (TODO)\n   - Email (TODO)\n\n### Performance:\n- Buffer: 1-5 seconds\n- LLM: ~800ms (P50)\n- RAG: ~200ms\n- Total: <3 seconds",
+        "height": 420,
+        "width": 320
+      },
+      "id": "sticky-note-final",
+      "name": "Sticky Note - Final",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [8240, 80]
+    }
+  ],
+  "connections": {
+    "Collect Tool Results": {
+      "main": [
+        [
+          {
+            "node": "Needs Second LLM Call?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Needs Second LLM Call?": {
+      "main": [
+        [
+          {
+            "node": "Prepare Second LLM Call",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Merge Final Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Second LLM Call": {
+      "main": [
+        [
+          {
+            "node": "Prepare Second Vertex Call",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Second Vertex Call": {
+      "main": [
+        [
+          {
+            "node": "Call Vertex AI (Second)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call Vertex AI (Second)": {
+      "main": [
+        [
+          {
+            "node": "Process Second Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Second Response": {
+      "main": [
+        [
+          {
+            "node": "Merge Final Response",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge Final Response": {
+      "main": [
+        [
+          {
+            "node": "Prepare Memory Save",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Memory Save": {
+      "main": [
+        [
+          {
+            "node": "Save User Message to History",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Save Assistant Message to History",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save User Message to History": {
+      "main": [
+        [
+          {
+            "node": "Trim History (Keep 50)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save Assistant Message to History": {
+      "main": [
+        [
+          {
+            "node": "Trim History (Keep 50)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Trim History (Keep 50)": {
+      "main": [
+        [
+          {
+            "node": "Increment Interaction Count",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Increment Interaction Count": {
+      "main": [
+        [
+          {
+            "node": "Update Last Interaction",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Last Interaction": {
+      "main": [
+        [
+          {
+            "node": "Set Memory TTL (30 days)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Memory TTL (30 days)": {
+      "main": [
+        [
+          {
+            "node": "Log Execution to DB",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Execution to DB": {
+      "main": [
+        [
+          {
+            "node": "Update Client Usage",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Client Usage": {
+      "main": [
+        [
+          {
+            "node": "Route to Channel",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route to Channel": {
+      "main": [
+        [
+          {
+            "node": "Channel Switch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Channel Switch": {
+      "main": [
+        [
+          {
+            "node": "Send to Chatwoot",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send to WhatsApp (Evolution)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "createdAt": "2025-11-06T00:00:00.000Z",
+      "updatedAt": "2025-11-06T00:00:00.000Z",
+      "id": "core",
+      "name": "core"
+    }
+  ],
+  "triggerCount": 0,
+  "updatedAt": "2025-11-06T00:00:00.000Z",
+  "versionId": "1"
+}

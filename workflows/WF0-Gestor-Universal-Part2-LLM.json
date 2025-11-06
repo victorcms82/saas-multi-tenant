@@ -1,0 +1,629 @@
+{
+  "name": "WF 0: Gestor Universal - Part 2 (LLM & Tools)",
+  "nodes": [
+    {
+      "parameters": {
+        "jsCode": "// Call Google Vertex AI (Gemini)\nconst context = $input.item.json;\nconst llmConfig = context.llm_config || {};\n\n// Build request for Vertex AI\nconst endpoint = `https://us-central1-aiplatform.googleapis.com/v1/projects/n8n-evolute/locations/us-central1/publishers/google/models/${context.llm_model}:generateContent`;\n\n// Convert messages to Gemini format\nconst contents = [];\nlet systemInstruction = '';\n\ncontext.messages.forEach(msg => {\n  if (msg.role === 'system') {\n    systemInstruction += msg.content + '\\n';\n  } else {\n    contents.push({\n      role: msg.role === 'assistant' ? 'model' : 'user',\n      parts: [{ text: msg.content }]\n    });\n  }\n});\n\n// Build tools declaration for Gemini\nconst toolsDeclaration = context.tools.map(tool => ({\n  functionDeclarations: [{\n    name: tool.function.name,\n    description: tool.function.description,\n    parameters: tool.function.parameters\n  }]\n}));\n\nconst requestBody = {\n  contents,\n  systemInstruction: {\n    parts: [{ text: systemInstruction }]\n  },\n  tools: toolsDeclaration.length > 0 ? toolsDeclaration : undefined,\n  generationConfig: {\n    temperature: llmConfig.temperature || 0.7,\n    topP: llmConfig.top_p || 0.95,\n    maxOutputTokens: llmConfig.max_tokens || 2048,\n    candidateCount: 1\n  },\n  safetySettings: [\n    {\n      category: 'HARM_CATEGORY_HARASSMENT',\n      threshold: 'BLOCK_MEDIUM_AND_ABOVE'\n    },\n    {\n      category: 'HARM_CATEGORY_HATE_SPEECH',\n      threshold: 'BLOCK_MEDIUM_AND_ABOVE'\n    },\n    {\n      category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT',\n      threshold: 'BLOCK_MEDIUM_AND_ABOVE'\n    },\n    {\n      category: 'HARM_CATEGORY_DANGEROUS_CONTENT',\n      threshold: 'BLOCK_MEDIUM_AND_ABOVE'\n    }\n  ]\n};\n\nreturn {\n  endpoint,\n  request_body: requestBody,\n  llm_provider: 'google',\n  llm_model: context.llm_model,\n  context_data: context\n};"
+      },
+      "id": "prepare-vertex-ai",
+      "name": "Prepare Vertex AI Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [4050, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT decrypted_secret \nFROM vault.decrypted_secrets \nWHERE id = (\n  SELECT google_credentials_vault_id \n  FROM clients \n  WHERE client_id = '{{ $('Build Context Window').item.json.client_id }}'\n);",
+        "options": {}
+      },
+      "id": "get-google-creds",
+      "name": "Get Google Credentials",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [4050, 150],
+      "credentials": {
+        "postgres": {
+          "id": "supabase-main",
+          "name": "Supabase Main DB"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.endpoint }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "oAuth2Api",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": []
+        },
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.request_body) }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "call-vertex-ai",
+      "name": "Call Vertex AI (Gemini)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [4250, 300],
+      "credentials": {
+        "oAuth2Api": {
+          "id": "google-vertex-ai-oauth",
+          "name": "Google Vertex AI OAuth"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.error }}",
+              "rightValue": "",
+              "operator": {
+                "type": "any",
+                "operation": "exists",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "or"
+        },
+        "options": {}
+      },
+      "id": "vertex-ai-error-check",
+      "name": "Vertex AI Error?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [4450, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Fallback to OpenAI\nconst context = $('Prepare Vertex AI Request').item.json.context_data;\nconst error = $input.item.json.error || {};\n\nconsole.log('Vertex AI failed, falling back to OpenAI:', error.message);\n\n// Build OpenAI request\nconst requestBody = {\n  model: 'gpt-4o-mini',\n  messages: context.messages,\n  tools: context.tools,\n  temperature: 0.7,\n  max_tokens: 2048\n};\n\nreturn {\n  endpoint: 'https://api.openai.com/v1/chat/completions',\n  request_body: requestBody,\n  llm_provider: 'openai',\n  llm_model: 'gpt-4o-mini',\n  fallback_reason: error.message || 'Vertex AI unavailable'\n};"
+      },
+      "id": "prepare-openai-fallback",
+      "name": "Prepare OpenAI Fallback",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [4450, 500]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.endpoint }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "openAiApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.request_body) }}",
+        "options": {}
+      },
+      "id": "call-openai",
+      "name": "Call OpenAI (Fallback)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [4650, 500],
+      "credentials": {
+        "openAiApi": {
+          "id": "openai-main",
+          "name": "OpenAI Main"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Process LLM Response (Google or OpenAI)\nconst llmResponse = $input.item.json;\nconst prepareNode = $('Prepare Vertex AI Request').item.json;\nconst isGoogle = llmResponse.candidates !== undefined;\nconst isOpenAI = llmResponse.choices !== undefined;\n\nlet response = {};\nlet toolCalls = [];\nlet responseText = '';\nlet finishReason = '';\nlet usageMetrics = {};\n\nif (isGoogle) {\n  // Google Vertex AI format\n  const candidate = llmResponse.candidates?.[0];\n  if (!candidate) {\n    throw new Error('No candidates in Gemini response');\n  }\n  \n  const content = candidate.content;\n  finishReason = candidate.finishReason || 'STOP';\n  \n  // Extract text or function calls\n  content.parts.forEach(part => {\n    if (part.text) {\n      responseText += part.text;\n    }\n    if (part.functionCall) {\n      toolCalls.push({\n        id: `call_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,\n        type: 'function',\n        function: {\n          name: part.functionCall.name,\n          arguments: JSON.stringify(part.functionCall.args || {})\n        }\n      });\n    }\n  });\n  \n  usageMetrics = {\n    prompt_tokens: llmResponse.usageMetadata?.promptTokenCount || 0,\n    completion_tokens: llmResponse.usageMetadata?.candidatesTokenCount || 0,\n    total_tokens: llmResponse.usageMetadata?.totalTokenCount || 0\n  };\n  \n} else if (isOpenAI) {\n  // OpenAI format\n  const choice = llmResponse.choices?.[0];\n  if (!choice) {\n    throw new Error('No choices in OpenAI response');\n  }\n  \n  const message = choice.message;\n  responseText = message.content || '';\n  finishReason = choice.finish_reason || 'stop';\n  \n  if (message.tool_calls) {\n    toolCalls = message.tool_calls;\n  }\n  \n  usageMetrics = {\n    prompt_tokens: llmResponse.usage?.prompt_tokens || 0,\n    completion_tokens: llmResponse.usage?.completion_tokens || 0,\n    total_tokens: llmResponse.usage?.total_tokens || 0\n  };\n}\n\n// Calculate cost\nlet costUsd = 0;\nif (isGoogle) {\n  // Gemini 2.0 Flash: $0.075/1M input, $0.30/1M output\n  costUsd = (usageMetrics.prompt_tokens * 0.075 / 1000000) + \n            (usageMetrics.completion_tokens * 0.30 / 1000000);\n} else {\n  // GPT-4o-mini: $0.15/1M input, $0.60/1M output\n  costUsd = (usageMetrics.prompt_tokens * 0.15 / 1000000) + \n            (usageMetrics.completion_tokens * 0.60 / 1000000);\n}\n\nresponse = {\n  response_text: responseText,\n  tool_calls: toolCalls,\n  finish_reason: finishReason,\n  has_tool_calls: toolCalls.length > 0,\n  usage: usageMetrics,\n  cost_usd: parseFloat(costUsd.toFixed(6)),\n  llm_provider: isGoogle ? 'google' : 'openai',\n  llm_model: prepareNode.llm_model,\n  raw_response: llmResponse\n};\n\nreturn response;"
+      },
+      "id": "process-llm-response",
+      "name": "Process LLM Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [4850, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.has_tool_calls }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "has-tool-calls-if",
+      "name": "Has Tool Calls?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [5050, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Loop through tool calls and prepare execution\nconst llmResponse = $input.item.json;\nconst toolCalls = llmResponse.tool_calls || [];\nconst context = $('Build Context Window').item.json;\n\nconst toolsToExecute = toolCalls.map(toolCall => {\n  const funcName = toolCall.function.name;\n  const funcArgs = JSON.parse(toolCall.function.arguments || '{}');\n  \n  return {\n    tool_call_id: toolCall.id,\n    tool_name: funcName,\n    tool_arguments: funcArgs,\n    client_id: context.client_id,\n    rag_namespace: context.rag_namespace\n  };\n});\n\nreturn toolsToExecute;"
+      },
+      "id": "prepare-tools",
+      "name": "Prepare Tool Execution",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [5050, 500]
+    },
+    {
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      },
+      "id": "split-tools",
+      "name": "Split Tools",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [5250, 500]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.tool_name }}",
+              "rightValue": "rag_search",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "tool-router",
+      "name": "Tool Router",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [5450, 500]
+    },
+    {
+      "parameters": {
+        "jsCode": "// RAG Search Tool - Generate Embedding\nconst toolArgs = $input.item.json.tool_arguments;\nconst query = toolArgs.query;\n\n// Check cache first\nconst crypto = require('crypto');\nconst cacheKey = crypto.createHash('sha256').update(query).digest('hex');\n\nreturn {\n  query,\n  cache_key: `embedding:${cacheKey}`,\n  top_k: toolArgs.top_k || 5,\n  tool_call_id: $input.item.json.tool_call_id,\n  rag_namespace: $input.item.json.rag_namespace\n};"
+      },
+      "id": "rag-prepare",
+      "name": "RAG: Prepare Query",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [5650, 500]
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "key": "={{ $json.cache_key }}",
+        "options": {
+          "dbNumber": 1
+        }
+      },
+      "id": "rag-check-cache",
+      "name": "RAG: Check Embedding Cache",
+      "type": "n8n-nodes-base.redis",
+      "typeVersion": 1,
+      "position": [5850, 500],
+      "credentials": {
+        "redis": {
+          "id": "redis-main",
+          "name": "Redis Main"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.value }}",
+              "rightValue": "",
+              "operator": {
+                "type": "any",
+                "operation": "notExists",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "or"
+        },
+        "options": {}
+      },
+      "id": "cache-miss-if",
+      "name": "Cache Miss?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [6050, 500]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://us-central1-aiplatform.googleapis.com/v1/projects/n8n-evolute/locations/us-central1/publishers/google/models/text-embedding-004:predict",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "oAuth2Api",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({\n  instances: [{ content: $('RAG: Prepare Query').item.json.query }]\n}) }}",
+        "options": {}
+      },
+      "id": "rag-generate-embedding",
+      "name": "RAG: Generate Embedding",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [6050, 700],
+      "credentials": {
+        "oAuth2Api": {
+          "id": "google-vertex-ai-oauth",
+          "name": "Google Vertex AI OAuth"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extract and cache embedding\nconst response = $input.item.json;\nconst prepareData = $('RAG: Prepare Query').item.json;\n\nconst embedding = response.predictions?.[0]?.embeddings?.values;\n\nif (!embedding) {\n  throw new Error('Failed to generate embedding');\n}\n\nreturn {\n  embedding,\n  cache_key: prepareData.cache_key,\n  query: prepareData.query,\n  rag_namespace: prepareData.rag_namespace,\n  top_k: prepareData.top_k,\n  tool_call_id: prepareData.tool_call_id\n};"
+      },
+      "id": "rag-extract-embedding",
+      "name": "RAG: Extract Embedding",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [6250, 700]
+    },
+    {
+      "parameters": {
+        "operation": "set",
+        "key": "={{ $json.cache_key }}",
+        "value": "={{ JSON.stringify($json.embedding) }}",
+        "expire": true,
+        "ttl": 604800,
+        "options": {
+          "dbNumber": 1
+        }
+      },
+      "id": "rag-cache-embedding",
+      "name": "RAG: Cache Embedding",
+      "type": "n8n-nodes-base.redis",
+      "typeVersion": 1,
+      "position": [6450, 700],
+      "credentials": {
+        "redis": {
+          "id": "redis-main",
+          "name": "Redis Main"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Use cached embedding\nconst cachedData = $input.item.json;\nconst prepareData = $('RAG: Prepare Query').item.json;\n\nconst embedding = JSON.parse(cachedData.value);\n\nreturn {\n  embedding,\n  query: prepareData.query,\n  rag_namespace: prepareData.rag_namespace,\n  top_k: prepareData.top_k,\n  tool_call_id: prepareData.tool_call_id,\n  from_cache: true\n};"
+      },
+      "id": "rag-use-cached",
+      "name": "RAG: Use Cached Embedding",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [6250, 500]
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combinationMode": "mergeByPosition",
+        "options": {}
+      },
+      "id": "rag-merge-embeddings",
+      "name": "RAG: Merge Embeddings",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 2.1,
+      "position": [6650, 500]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT * FROM search_rag_hybrid(\n  p_namespace := '{{ $json.rag_namespace }}',\n  p_query_embedding := '[{{ $json.embedding.join(',') }}]'::vector(768),\n  p_query_text := '{{ $json.query }}',\n  p_limit := {{ $json.top_k }},\n  p_semantic_weight := 0.7,\n  p_min_similarity := 0.7\n);",
+        "options": {}
+      },
+      "id": "rag-search-db",
+      "name": "RAG: Search Database",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [6850, 500],
+      "credentials": {
+        "postgres": {
+          "id": "supabase-main",
+          "name": "Supabase Main DB"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Format RAG results for LLM\nconst results = $input.all();\nconst toolCallId = $('RAG: Prepare Query').item.json.tool_call_id;\n\nif (!results || results.length === 0) {\n  return {\n    tool_call_id: toolCallId,\n    tool_name: 'rag_search',\n    tool_result: 'Nenhum resultado encontrado na base de conhecimento.',\n    chunks_found: 0\n  };\n}\n\nconst formattedContext = results.map((r, idx) => {\n  return `[Fonte ${idx + 1}: ${r.json.source_name}]\n${r.json.chunk_text}\n(Relevância: ${(r.json.similarity * 100).toFixed(1)}%)`;\n}).join('\\n\\n---\\n\\n');\n\nconst avgSimilarity = results.reduce((sum, r) => sum + r.json.similarity, 0) / results.length;\n\nreturn {\n  tool_call_id: toolCallId,\n  tool_name: 'rag_search',\n  tool_result: formattedContext,\n  chunks_found: results.length,\n  avg_similarity: parseFloat(avgSimilarity.toFixed(3)),\n  metadata: {\n    sources: results.map(r => r.json.source_name)\n  }\n};"
+      },
+      "id": "rag-format-results",
+      "name": "RAG: Format Results",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [7050, 500]
+    },
+    {
+      "parameters": {
+        "content": "## Tool Execution Flow\n\n### RAG Search Tool:\n1. ✅ Prepare Query\n2. ✅ Check Embedding Cache (Redis)\n3. ✅ Generate Embedding (if cache miss)\n4. ✅ Cache New Embedding\n5. ✅ Hybrid Search (Supabase)\n6. ✅ Format Results for LLM\n\n### Other Tools:\n- Calendar (Google Calendar API)\n- CRM Update (Pipedrive/HubSpot)\n- Email Send (Gmail API)\n- Image Generation (Imagen/DALL-E)",
+        "height": 350,
+        "width": 300
+      },
+      "id": "sticky-note-tools",
+      "name": "Sticky Note - Tools",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [5640, 80]
+    }
+  ],
+  "connections": {
+    "Prepare Vertex AI Request": {
+      "main": [
+        [
+          {
+            "node": "Call Vertex AI (Gemini)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call Vertex AI (Gemini)": {
+      "main": [
+        [
+          {
+            "node": "Vertex AI Error?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Vertex AI Error?": {
+      "main": [
+        [
+          {
+            "node": "Process LLM Response",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Prepare OpenAI Fallback",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare OpenAI Fallback": {
+      "main": [
+        [
+          {
+            "node": "Call OpenAI (Fallback)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call OpenAI (Fallback)": {
+      "main": [
+        [
+          {
+            "node": "Process LLM Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process LLM Response": {
+      "main": [
+        [
+          {
+            "node": "Has Tool Calls?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Tool Calls?": {
+      "main": [
+        [
+          {
+            "node": "Prepare Tool Execution",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Tool Execution": {
+      "main": [
+        [
+          {
+            "node": "Split Tools",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Tools": {
+      "main": [
+        [
+          {
+            "node": "Tool Router",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tool Router": {
+      "main": [
+        [
+          {
+            "node": "RAG: Prepare Query",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "RAG: Prepare Query": {
+      "main": [
+        [
+          {
+            "node": "RAG: Check Embedding Cache",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "RAG: Check Embedding Cache": {
+      "main": [
+        [
+          {
+            "node": "Cache Miss?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Cache Miss?": {
+      "main": [
+        [
+          {
+            "node": "RAG: Generate Embedding",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "RAG: Use Cached Embedding",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "RAG: Generate Embedding": {
+      "main": [
+        [
+          {
+            "node": "RAG: Extract Embedding",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "RAG: Extract Embedding": {
+      "main": [
+        [
+          {
+            "node": "RAG: Cache Embedding",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "RAG: Cache Embedding": {
+      "main": [
+        [
+          {
+            "node": "RAG: Merge Embeddings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "RAG: Use Cached Embedding": {
+      "main": [
+        [
+          {
+            "node": "RAG: Merge Embeddings",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "RAG: Merge Embeddings": {
+      "main": [
+        [
+          {
+            "node": "RAG: Search Database",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "RAG: Search Database": {
+      "main": [
+        [
+          {
+            "node": "RAG: Format Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "createdAt": "2025-11-06T00:00:00.000Z",
+      "updatedAt": "2025-11-06T00:00:00.000Z",
+      "id": "core",
+      "name": "core"
+    }
+  ],
+  "triggerCount": 0,
+  "updatedAt": "2025-11-06T00:00:00.000Z",
+  "versionId": "1"
+}
