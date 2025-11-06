@@ -1099,13 +1099,22 @@ BEGIN
   RAISE NOTICE 'Assinaturas criadas para clientes existentes: %', v_subscriptions_created;
   
   -- 3. Adicionar FK de agents → agent_templates (agora que todos têm template_id)
-  ALTER TABLE public.agents
-    ADD CONSTRAINT fk_agents_template
-    FOREIGN KEY (template_id) 
-    REFERENCES public.agent_templates(template_id)
-    ON DELETE SET NULL;
-  
-  RAISE NOTICE 'FK agents → agent_templates criada';
+  -- Verificar se já existe
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.table_constraints 
+    WHERE constraint_name = 'fk_agents_template' 
+    AND table_name = 'agents'
+  ) THEN
+    ALTER TABLE public.agents
+      ADD CONSTRAINT fk_agents_template
+      FOREIGN KEY (template_id) 
+      REFERENCES public.agent_templates(template_id)
+      ON DELETE SET NULL;
+    
+    RAISE NOTICE 'FK agents → agent_templates criada';
+  ELSE
+    RAISE NOTICE 'FK agents → agent_templates já existe';
+  END IF;
   
   RAISE NOTICE '';
   RAISE NOTICE '✅ Migração de clientes existentes completa!';

@@ -84,8 +84,7 @@ CREATE INDEX IF NOT EXISTS idx_agents_composite
   ON public.agents(client_id, agent_id);
 
 CREATE INDEX IF NOT EXISTS idx_agents_template_id 
-  ON public.agents(template_id)
-  WHERE template_id IS NOT NULL;
+  ON public.agents(template_id);
 
 CREATE INDEX IF NOT EXISTS idx_agents_is_active 
   ON public.agents(is_active) 
@@ -95,8 +94,7 @@ CREATE INDEX IF NOT EXISTS idx_agents_rag_namespace
   ON public.agents(rag_namespace);
 
 CREATE INDEX IF NOT EXISTS idx_agents_chatwoot_inbox 
-  ON public.agents(chatwoot_inbox_id)
-  WHERE chatwoot_inbox_id IS NOT NULL;
+  ON public.agents(chatwoot_inbox_id);
 
 -- ============================================================================
 -- PARTE 3: COMENTÁRIOS E DOCUMENTAÇÃO
