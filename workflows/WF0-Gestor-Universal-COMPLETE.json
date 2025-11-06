@@ -305,7 +305,7 @@
     },
     {
       "parameters": {
-        "functionCode": "// Extrair resposta final do LLM\nconst llmResponse = $input.item.json.choices?.[0]?.message?.content || 'Desculpe, não consegui processar sua mensagem.';\nconst toolResults = $input.item.json.tool_results || [];\n\nlet finalResponse = llmResponse;\n\n// Se executou tools, adicionar confirmação\nif (toolResults.length > 0) {\n  finalResponse += '\\n\\n' + toolResults.map(r => r.result).join('\\n');\n}\n\nreturn {\n  json: {\n    ...($input.item.json),\n    final_response: finalResponse,\n    response_type: 'text'\n  }\n};"
+        "functionCode": "// Extrair resposta final do LLM\nconst llmResponse = $input.item.json.choices?.[0]?.message?.content || 'Desculpe, não consegui processar sua mensagem.';\nconst toolResults = $input.item.json.tool_results || [];\n\nlet finalResponse = llmResponse;\n\n// Se executou tools, adicionar confirmação\nif (toolResults.length > 0) {\n  finalResponse += '\\n\\n' + toolResults.map(r => r.result).join('\\n');\n}\n\n// Detectar solicitações de mídia na resposta\nconst needsImage = /\\[GERAR_IMAGEM:(.+?)\\]/.test(finalResponse);\nconst needsDocument = /\\[GERAR_DOCUMENTO:(.+?)\\]/.test(finalResponse);\nconst needsAudio = /\\[GERAR_AUDIO:(.+?)\\]/.test(finalResponse);\n\nreturn {\n  json: {\n    ...($input.item.json),\n    final_response: finalResponse,\n    response_type: 'text',\n    needs_image_generation: needsImage,\n    needs_document_generation: needsDocument,\n    needs_audio_generation: needsAudio,\n    has_media_to_generate: needsImage || needsDocument || needsAudio\n  }\n};"
       },
       "name": "Construir Resposta Final",
       "type": "n8n-nodes-base.function",
@@ -315,13 +315,81 @@
     },
     {
       "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{$json.has_media_to_generate}}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "name": "Precisa Gerar Mídia?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [3850, 200],
+      "id": "check-media-generation"
+    },
+    {
+      "parameters": {
+        "functionCode": "// Gerar imagem com DALL-E 3\nconst finalResponse = $input.item.json.final_response;\nconst match = finalResponse.match(/\\[GERAR_IMAGEM:(.+?)\\]/);\n\nif (!match) {\n  return { json: { ...$input.item.json, generated_images: [] } };\n}\n\nconst imagePrompt = match[1];\n\n// TODO: Integrar com DALL-E 3 ou Stable Diffusion\n// Por enquanto, placeholder\nconst generatedImages = [\n  {\n    prompt: imagePrompt,\n    url: 'https://placeholder.com/generated-image.jpg',\n    service: 'dall-e-3',\n    cost_usd: 0.04 // DALL-E 3 standard quality\n  }\n];\n\n// Remover tag da resposta\nconst cleanResponse = finalResponse.replace(/\\[GERAR_IMAGEM:.+?\\]/g, '');\n\nreturn {\n  json: {\n    ...($input.item.json),\n    final_response: cleanResponse,\n    generated_images: generatedImages,\n    images_to_send: generatedImages.map(img => img.url)\n  }\n};"
+      },
+      "name": "Gerar Imagem (DALL-E 3)",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [4050, 100],
+      "id": "generate-image"
+    },
+    {
+      "parameters": {
+        "functionCode": "// Gerar documento PDF/DOCX\nconst finalResponse = $input.item.json.final_response;\nconst match = finalResponse.match(/\\[GERAR_DOCUMENTO:(.+?)\\]/);\n\nif (!match) {\n  return { json: { ...$input.item.json, generated_documents: [] } };\n}\n\nconst docType = match[1]; // 'relatorio', 'proposta', 'contrato'\n\n// TODO: Integrar com biblioteca de geração de PDF (puppeteer, pdfkit)\nconst generatedDocuments = [\n  {\n    type: docType,\n    url: 'https://storage.supabase.co/generated-doc.pdf',\n    filename: `${docType}-${Date.now()}.pdf`,\n    service: 'puppeteer'\n  }\n];\n\n// Remover tag da resposta\nconst cleanResponse = finalResponse.replace(/\\[GERAR_DOCUMENTO:.+?\\]/g, '');\n\nreturn {\n  json: {\n    ...($input.item.json),\n    final_response: cleanResponse,\n    generated_documents: generatedDocuments,\n    documents_to_send: generatedDocuments.map(doc => ({\n      url: doc.url,\n      filename: doc.filename\n    }))\n  }\n};"
+      },
+      "name": "Gerar Documento (PDF)",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [4050, 200],
+      "id": "generate-document"
+    },
+    {
+      "parameters": {
+        "functionCode": "// Gerar áudio com TTS (Text-to-Speech)\nconst finalResponse = $input.item.json.final_response;\nconst match = finalResponse.match(/\\[GERAR_AUDIO:(.+?)\\]/);\n\nif (!match) {\n  return { json: { ...$input.item.json, generated_audios: [] } };\n}\n\nconst audioText = match[1];\n\n// TODO: Integrar com OpenAI TTS, Google TTS ou ElevenLabs\nconst generatedAudios = [\n  {\n    text: audioText,\n    url: 'https://storage.supabase.co/generated-audio.mp3',\n    service: 'openai-tts',\n    voice: 'nova', // OpenAI TTS voices: alloy, echo, fable, onyx, nova, shimmer\n    duration_seconds: Math.ceil(audioText.length / 15), // ~15 chars/sec\n    cost_usd: Math.ceil(audioText.length / 1000) * 0.015 // $15/1M chars\n  }\n];\n\n// Remover tag da resposta\nconst cleanResponse = finalResponse.replace(/\\[GERAR_AUDIO:.+?\\]/g, '');\n\nreturn {\n  json: {\n    ...($input.item.json),\n    final_response: cleanResponse,\n    generated_audios: generatedAudios,\n    audios_to_send: generatedAudios.map(audio => audio.url)\n  }\n};"
+      },
+      "name": "Gerar Áudio (TTS)",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [4050, 300],
+      "id": "generate-audio"
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineAll"
+      },
+      "name": "Reunir Mídia Gerada",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 2.1,
+      "position": [4250, 200],
+      "id": "merge-generated-media"
+    },
+    {
+      "parameters": {
+        "functionCode": "// Preparar payload completo com texto + mídias\nconst finalResponse = $input.item.json.final_response || '';\nconst imagesToSend = $input.item.json.images_to_send || [];\nconst documentsToSend = $input.item.json.documents_to_send || [];\nconst audiosToSend = $input.item.json.audios_to_send || [];\n\nconst attachments = [];\n\n// Adicionar imagens\nimagesToSend.forEach(url => {\n  attachments.push({\n    type: 'image',\n    url: url\n  });\n});\n\n// Adicionar documentos\ndocumentsToSend.forEach(doc => {\n  attachments.push({\n    type: 'file',\n    url: doc.url,\n    filename: doc.filename\n  });\n});\n\n// Adicionar áudios\naudiosToSend.forEach(url => {\n  attachments.push({\n    type: 'audio',\n    url: url\n  });\n});\n\nreturn {\n  json: {\n    ...($input.item.json),\n    message_content: finalResponse,\n    attachments: attachments,\n    has_attachments: attachments.length > 0,\n    attachment_count: attachments.length\n  }\n};"
+      },
+      "name": "Preparar Payload com Mídia",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [4450, 200],
+      "id": "prepare-payload-with-media"
+    },
+    {
+      "parameters": {
         "operation": "executeQuery",
-        "query": "UPDATE client_subscriptions\nSET \n  total_messages = total_messages + 1,\n  transcription_minutes_used = transcription_minutes_used + ({{$json.total_transcription_seconds || 0}} / 60.0),\n  images_processed = images_processed + {{$json.total_images_processed || 0}},\n  last_message_at = NOW(),\n  updated_at = NOW()\nWHERE client_id = '{{$json.client_id}}'\n  AND agent_id = '{{$json.agent_id}}'\nRETURNING *;"
+        "query": "UPDATE client_subscriptions\nSET \n  total_messages = total_messages + 1,\n  transcription_minutes_used = transcription_minutes_used + ({{$json.total_transcription_seconds || 0}} / 60.0),\n  images_processed = images_processed + {{$json.total_images_processed || 0}},\n  images_generated = images_generated + {{$json.generated_images?.length || 0}},\n  last_message_at = NOW(),\n  updated_at = NOW()\nWHERE client_id = '{{$json.client_id}}'\n  AND agent_id = '{{$json.agent_id}}'\nRETURNING *;"
       },
       "name": "Atualizar Usage Tracking",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.1,
-      "position": [3850, 200],
+      "position": [4650, 200],
       "credentials": {
         "postgres": {
           "id": "supabase-db",
@@ -341,7 +409,7 @@
           "parameters": [
             {
               "name": "content",
-              "value": "={{$json.final_response}}"
+              "value": "={{$json.message_content}}"
             },
             {
               "name": "message_type",
@@ -350,15 +418,19 @@
             {
               "name": "private",
               "value": false
+            },
+            {
+              "name": "attachments",
+              "value": "={{$json.attachments}}"
             }
           ]
         },
         "options": {}
       },
-      "name": "Enviar Resposta via Chatwoot",
+      "name": "Enviar Resposta + Mídia via Chatwoot",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.1,
-      "position": [4050, 200],
+      "position": [4850, 200],
       "credentials": {
         "chatwootApi": {
           "id": "chatwoot-creds",
@@ -450,10 +522,35 @@
       "main": [[{"node": "Construir Resposta Final", "type": "main", "index": 0}]]
     },
     "Construir Resposta Final": {
+      "main": [[{"node": "Precisa Gerar Mídia?", "type": "main", "index": 0}]]
+    },
+    "Precisa Gerar Mídia?": {
+      "main": [
+        [
+          {"node": "Gerar Imagem (DALL-E 3)", "type": "main", "index": 0},
+          {"node": "Gerar Documento (PDF)", "type": "main", "index": 0},
+          {"node": "Gerar Áudio (TTS)", "type": "main", "index": 0}
+        ],
+        [{"node": "Preparar Payload com Mídia", "type": "main", "index": 0}]
+      ]
+    },
+    "Gerar Imagem (DALL-E 3)": {
+      "main": [[{"node": "Reunir Mídia Gerada", "type": "main", "index": 0}]]
+    },
+    "Gerar Documento (PDF)": {
+      "main": [[{"node": "Reunir Mídia Gerada", "type": "main", "index": 1}]]
+    },
+    "Gerar Áudio (TTS)": {
+      "main": [[{"node": "Reunir Mídia Gerada", "type": "main", "index": 2}]]
+    },
+    "Reunir Mídia Gerada": {
+      "main": [[{"node": "Preparar Payload com Mídia", "type": "main", "index": 0}]]
+    },
+    "Preparar Payload com Mídia": {
       "main": [[{"node": "Atualizar Usage Tracking", "type": "main", "index": 0}]]
     },
     "Atualizar Usage Tracking": {
-      "main": [[{"node": "Enviar Resposta via Chatwoot", "type": "main", "index": 0}]]
+      "main": [[{"node": "Enviar Resposta + Mídia via Chatwoot", "type": "main", "index": 0}]]
     }
   },
   "settings": {

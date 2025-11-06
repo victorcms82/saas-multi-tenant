@@ -30,12 +30,20 @@
 - [x] Filtro de mensagens incoming/outgoing
 - [x] Query de dados do agente no DB
 
-#### Processamento de Mídia
+#### Processamento de Mídia (Receber)
 - [x] Node para transcrição de áudio (placeholder)
 - [x] Node para Vision AI (placeholder)
 - [x] Node para extração de documentos (placeholder)
 - [x] Classificação de tipos de mídia
 - [x] Merge de mídia processada
+
+#### Geração de Mídia (Enviar)
+- [x] Detecção de tags de geração ([GERAR_IMAGEM:...])
+- [x] Node DALL-E 3 para geração de imagens
+- [x] Node OpenAI TTS para geração de áudios
+- [x] Node Puppeteer para geração de PDFs
+- [x] Upload para Supabase Storage
+- [x] Envio via Chatwoot com attachments
 
 #### RAG & LLM
 - [x] Node de buffer Redis (placeholder)
@@ -45,7 +53,7 @@
 
 #### Tools & Tracking
 - [x] Execução de tools (Calendar, Sheets, CRM)
-- [x] Update de usage tracking no DB
+- [x] Update de usage tracking no DB (mensagens, transcrição, imagens processadas **+ geradas**)
 - [x] Envio de resposta via Chatwoot
 - [x] Error handler com retry logic
 
@@ -53,8 +61,9 @@
 - [x] WF0-DOCUMENTATION.md (guia completo)
 - [x] WF0-QUICK-START.md (instalação rápida)
 - [x] .env.example (configurações)
+- [x] Migration 004 (tracking de mídia gerada)
 
-**Status**: Workflow JSON criado, aguardando importação e teste
+**Status**: Workflow JSON atualizado (36 nodes), aguardando importação e teste
 
 ---
 

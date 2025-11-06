@@ -174,8 +174,52 @@ WHERE client_id = ? AND agent_id = ?
 
 ### 8. **Resposta Multi-Modal**
 - **Texto**: Sempre incluído
-- **Imagens**: Geradas via DALL-E ou Stable Diffusion (quando solicitado)
-- **Arquivos**: PDFs, planilhas, relatórios (quando gerados por tools)
+- **Imagens Geradas**: DALL-E 3 ou Stable Diffusion (quando solicitado pelo LLM)
+- **Áudios Gerados**: OpenAI TTS ou ElevenLabs (mensagens de voz)
+- **Documentos Gerados**: PDFs, planilhas, relatórios (via Puppeteer/PDFKit)
+
+#### Como o LLM Solicita Geração de Mídia
+
+O LLM pode incluir tags especiais na resposta:
+
+```
+[GERAR_IMAGEM: logo moderno para clínica odontológica]
+[GERAR_DOCUMENTO: relatorio]
+[GERAR_AUDIO: Olá! Este é um lembrete da sua consulta amanhã às 14h]
+```
+
+O workflow detecta essas tags e:
+1. Chama a API de geração (DALL-E, TTS, etc)
+2. Faz upload para storage (Supabase Storage)
+3. Remove a tag da resposta
+4. Envia mensagem + arquivo anexado via Chatwoot
+
+#### Custos de Geração
+
+| Tipo | API | Custo |
+|------|-----|-------|
+| Imagem (1024x1024) | DALL-E 3 | $0.04 |
+| Imagem (1024x1024 HD) | DALL-E 3 | $0.08 |
+| Áudio TTS | OpenAI TTS | $0.015/1K chars |
+| Áudio TTS Premium | ElevenLabs | $0.30/1K chars |
+| PDF (Puppeteer) | Local | $0 |
+
+#### Storage
+
+Arquivos gerados são armazenados em:
+```
+Supabase Storage:
+/client-media/
+  /{client_id}/
+    /generated-images/
+      /2025-11-06-logo.png
+    /generated-audios/
+      /2025-11-06-reminder.mp3
+    /generated-documents/
+      /2025-11-06-report.pdf
+```
+
+**Retenção**: 30 dias (após isso, arquivado ou deletado)
 
 ---
 
@@ -226,21 +270,24 @@ WHERE client_id = ? AND agent_id = ?
 | Análise de imagem    | $0.01/imagem           | Se houver imagem       |
 | RAG query            | $0.0001                | Sempre                 |
 | Function calling     | +20% tokens LLM        | Se chamar tools        |
+| **Geração de imagem** | **$0.04-0.08**        | **Se LLM solicitar**   |
+| **Geração de áudio**  | **$0.015/1K chars**   | **Se LLM solicitar**   |
+| **Geração de PDF**    | **$0**                | **Processamento local**|
 
-### Exemplo Real
-Cliente enviou: "Oi" + áudio de 30s + 1 foto
+### Exemplo Real com Mídia Gerada
+Cliente enviou: "Crie um logo para minha clínica" + "Me envie um áudio confirmando"
 
 ```
-- Texto: $0.0001
-- Transcrição: $0.003 (0.5 min × $0.006)
-- Vision AI: $0.01
+- Texto entrada: $0.0001
+- LLM processamento: $0.0003
+- Geração de imagem (DALL-E 3): $0.04
+- Geração de áudio TTS (50 chars): $0.0008
 - RAG: $0.0001
-- LLM resposta: $0.0002
 ─────────────────────────
-Total: $0.0134 (~R$0.071)
+Total: $0.0413 (~R$0.22)
 ```
 
-Com plano de **R$697/mês** e **98.94% margem**, cada interação custa **R$0.071** e você cobra **R$697**.
+Com plano de **R$697/mês**, você pode gerar ~3,170 imagens e ainda ter **98% margem**.
 
 ---
 

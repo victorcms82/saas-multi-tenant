@@ -1,0 +1,1 @@
+INSERT INTO "public"."webhooks_config" ("id", "created_at", "service", "purpose", "n8n_workflow_id", "path", "parameters", "notes", "environment") VALUES ('45e8cfdb-1308-453a-b02c-8ab76a1fa201', '2025-10-29 11:58:11.992717+00', 'Chatwoot', 'Gestor de Agente', '', 'gestor-ia/chatwoot', '{"client_id":"required"}', 'Webhook principal para todos os clientes Chatwoot', 'production');

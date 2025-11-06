@@ -134,12 +134,39 @@ images_processed += image_count
 - Agrupa mensagens enviadas rapidamente
 - Previne múltiplas chamadas LLM desnecessárias
 
-#### 8. **Error Handling**
+#### 8. **Geração de Mídia pelo Agente**
+O agente pode **gerar e enviar** mídia automaticamente:
+
+**Imagens** → DALL-E 3
+```
+LLM: "Claro! [GERAR_IMAGEM: logo moderno para clínica]"
+     ↓
+Workflow gera imagem → Upload Storage → Envia via Chatwoot
+Custo: $0.04/imagem (1024x1024)
+```
+
+**Áudios** → OpenAI TTS
+```
+LLM: "[GERAR_AUDIO: Sua consulta foi confirmada para amanhã]"
+     ↓
+Workflow gera áudio → Upload Storage → Envia mensagem de voz
+Custo: $0.015/1K caracteres
+```
+
+**Documentos** → Puppeteer/PDFKit
+```
+LLM: "[GERAR_DOCUMENTO: relatorio]"
+     ↓
+Workflow gera PDF → Upload Storage → Envia arquivo
+Custo: $0 (processamento local)
+```
+
+#### 9. **Error Handling**
 - Try/catch em todos os nodes críticos
 - Retry logic com backoff exponencial
 - Fallback para mensagem genérica
 
-### Arquitetura (30 nodes)
+### Arquitetura (36 nodes)
 
 ```
 Chatwoot Webhook
@@ -179,9 +206,24 @@ Buscar Dados do DB (agents + subscriptions)
         │                    │
         └────────┬───────────┘
                  ↓
+        Construir Resposta Final
+                 ↓
+        ┌─── Precisa Gerar Mídia? ───┐
+        │                            │
+       Sim                          Não
+        │                            │
+        ↓                            ↓
+    [Gerar Mídia]              [Texto apenas]
+        │
+        ├─ DALL-E 3 (imagem)
+        ├─ OpenAI TTS (áudio)
+        └─ Puppeteer (PDF)
+        │
+        └─→ Preparar Payload com Mídia
+                 ↓
         Atualizar Usage Tracking (DB)
                  ↓
-        Enviar Resposta via Chatwoot
+        Enviar Resposta + Mídia via Chatwoot
 ```
 
 ---
