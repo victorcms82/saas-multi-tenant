@@ -155,6 +155,133 @@ Conhecimento (RAG):
 - FAQs técnicos (Google Drive)
 - Scripts de objeções (Notion)
 
+2.5 Multi-Tenancy & Múltiplos Agentes por Cliente
+
+**Arquitetura Multi-Agente Avançada**
+
+O sistema suporta **múltiplos agentes especializados por cliente**, permitindo que uma única empresa tenha vários agentes com diferentes personalidades, ferramentas e bases de conhecimento.
+
+**Estrutura Hierárquica:**
+
+```
+┌──────────────────────────────────────────────────────────────┐
+│                    INFRAESTRUTURA ÚNICA                       │
+│                  (1 n8n + 1 Supabase + 1 Redis)              │
+└────────────────────────┬─────────────────────────────────────┘
+                         │
+         ┌───────────────┴───────────────┬──────────────────┐
+         ▼                               ▼                  ▼
+    ┌─────────┐                     ┌─────────┐       ┌─────────┐
+    │Cliente A│                     │Cliente B│       │Cliente C│
+    │Acme Corp│                     │Tech Ltd │       │Store SA │
+    └────┬────┘                     └────┬────┘       └────┬────┘
+         │                               │                 │
+    ┌────┴────┬────────┐            ┌────┴────┐      ┌────┴────┐
+    ▼         ▼        ▼            ▼         ▼      ▼         ▼
+┌───────┐ ┌──────┐ ┌────────┐  ┌──────┐ ┌──────┐ ┌──────┐ ┌──────┐
+│ SDR   │ │Suport│ │Cobrança│  │Recepç│ │Vendas│ │ SAC  │ │Vendas│
+│Agent  │ │Agent │ │ Agent  │  │ Agent│ │Agent │ │Agent │ │Agent │
+└───────┘ └──────┘ └────────┘  └──────┘ └──────┘ └──────┘ └──────┘
+```
+
+**Exemplo Real:**
+
+```yaml
+Cliente: Acme Corp (client_id: "acme-corp")
+├─ Agente 1: SDR (agent_id: "sdr")
+│  ├─ Personalidade: "Vendedor proativo, energético, focado em qualificação"
+│  ├─ Tools: [rag_search, calendar_schedule, crm_create_lead]
+│  ├─ RAG Namespace: "acme-corp/sdr"
+│  ├─ Sistema Prompt: "Você é Lucas, SDR da Acme..."
+│  └─ Rate Limit: 100 msgs/dia
+│
+├─ Agente 2: Suporte (agent_id: "support")
+│  ├─ Personalidade: "Técnico, paciente, didático"
+│  ├─ Tools: [rag_search, ticket_create, knowledge_base_search]
+│  ├─ RAG Namespace: "acme-corp/support"
+│  ├─ Sistema Prompt: "Você é Ana, especialista técnica..."
+│  └─ Rate Limit: 200 msgs/dia
+│
+└─ Agente 3: Cobrança (agent_id: "billing")
+   ├─ Personalidade: "Firme mas educado, focado em negociação"
+   ├─ Tools: [rag_search, payment_link, invoice_send]
+   ├─ RAG Namespace: "acme-corp/billing"
+   ├─ Sistema Prompt: "Você é Carlos, gestor de cobrança..."
+   └─ Rate Limit: 50 msgs/dia
+```
+
+**Isolamento de Dados por Agente:**
+
+| Recurso | Isolamento | Exemplo |
+|---------|-----------|---------|
+| **RAG Documents** | `client_id` + `agent_id` | `acme-corp/sdr` vs `acme-corp/support` |
+| **Memória Redis** | `client_id:agent_id:conversation_id` | `acme-corp:sdr:conv_123` |
+| **System Prompt** | Por agente (tabela `agents`) | Cada agente tem prompt único |
+| **Tools Habilitadas** | Por agente (`tools_enabled` JSONB) | SDR tem CRM, Suporte tem Tickets |
+| **Rate Limits** | Por agente | SDR: 100/dia, Suporte: 200/dia |
+| **Logs** | `client_id` + `agent_id` | Rastreamento individual |
+
+**Roteamento Inteligente:**
+
+O sistema usa **Chatwoot como hub central** para rotear mensagens ao agente correto:
+
+```
+1. Cliente envia mensagem via WhatsApp
+   ↓
+2. Chatwoot recebe em inbox específico
+   ↓
+3. Custom attribute `agent_id` identifica o agente
+   ↓
+4. Webhook envia para n8n: { client_id, agent_id, message }
+   ↓
+5. n8n carrega config do agente correto
+   ↓
+6. Agente processa e responde via Chatwoot
+```
+
+**Exemplo de Webhook do Chatwoot:**
+
+```json
+{
+  "event": "message_created",
+  "message_type": "incoming",
+  "content": "Quanto custa o produto X?",
+  "inbox": {
+    "id": 123,
+    "name": "WhatsApp Acme - SDR"
+  },
+  "conversation": {
+    "id": 456,
+    "custom_attributes": {
+      "client_id": "acme-corp",
+      "agent_id": "sdr"
+    }
+  },
+  "sender": {
+    "phone_number": "+5511999999999"
+  }
+}
+```
+
+**Benefícios:**
+
+✅ **Especialização:** Cada agente otimizado para sua função
+✅ **Escalabilidade:** Adicionar novo agente = 1 INSERT no DB
+✅ **Isolamento:** RAG, memória e logs completamente separados
+✅ **Flexibilidade:** Cliente pode ter 1 ou 100 agentes
+✅ **Custo:** Infraestrutura compartilhada (multi-tenant)
+
+**Comparação: Antes vs Agora**
+
+| Aspecto | ❌ Antes (1 agente/cliente) | ✅ Agora (N agentes/cliente) |
+|---------|----------------------------|------------------------------|
+| **Limite** | 1 agente por cliente | Ilimitado agentes por cliente |
+| **Especialização** | Agente genérico | Agentes especializados (SDR, Suporte, etc) |
+| **Schema** | Tabela `clients` com tudo | Tabela `agents` separada |
+| **RAG** | Namespace por cliente | Namespace por agente |
+| **Tools** | Mesmo conjunto para todos | Conjunto único por agente |
+| **Roteamento** | Direct webhook | Chatwoot inbox → agent_id |
+
 3. 🖥️ Infraestrutura & Deployment
 3.1 Servidor Atual (Hetzner)
 Especificações:
@@ -446,7 +573,233 @@ ALTER TABLE public.clients ENABLE ROW LEVEL SECURITY;
 -- CREATE POLICY "Admins podem ver todos os clientes"
 --   ON public.clients FOR SELECT
 --   USING (auth.jwt() ->> 'role' = 'admin');
-Tabela 2: packages (Templates de Agentes)
+
+Tabela 2: agents (Múltiplos Agentes por Cliente)
+sql-- ============================================================================
+-- TABELA: public.agents
+-- DESCRIÇÃO: Agentes especializados de cada cliente. Permite que um cliente
+--            tenha múltiplos agentes (SDR, Suporte, Cobrança, etc).
+--            Um cliente pode ter N agentes, cada um com config própria.
+-- ============================================================================
+
+CREATE TABLE public.agents (
+  -- Identificação Única
+  id uuid DEFAULT gen_random_uuid() NOT NULL PRIMARY KEY,
+  created_at timestamptz DEFAULT now() NOT NULL,
+  updated_at timestamptz DEFAULT now() NOT NULL,
+
+  -- Relacionamento com Cliente (FK)
+  client_id text NOT NULL REFERENCES public.clients(client_id) ON DELETE CASCADE,
+  
+  -- Identificador do Agente (único dentro do cliente)
+  agent_id text NOT NULL, -- Ex: "sdr", "support", "billing"
+  agent_name text NOT NULL, -- Nome amigável: "Agente SDR", "Suporte Técnico"
+  
+  is_active boolean DEFAULT true NOT NULL,
+  
+  -- Configuração do Agente (Personalidade)
+  package text NOT NULL, -- FK lógica para packages.package_name
+  system_prompt text NOT NULL, -- Prompt COMPLETO específico deste agente
+  
+  -- Configuração de LLM (pode sobrescrever padrão do cliente)
+  llm_provider text DEFAULT 'google'::text NOT NULL,
+  llm_model text DEFAULT 'gemini-2.0-flash-exp'::text NOT NULL,
+  llm_config jsonb DEFAULT '{
+    "temperature": 0.7,
+    "top_p": 0.95,
+    "max_tokens": 2048,
+    "grounding": true
+  }'::jsonb,
+
+  -- Tools Disponíveis (específicas por agente)
+  tools_enabled jsonb DEFAULT '["rag"]'::jsonb NOT NULL,
+  -- Ex SDR: ["rag", "calendar_google", "crm_create_lead"]
+  -- Ex Suporte: ["rag", "ticket_create", "knowledge_base_search"]
+  -- Ex Cobrança: ["rag", "payment_link", "invoice_send"]
+  
+  -- Configuração RAG (namespace isolado por agente)
+  rag_namespace text NOT NULL UNIQUE, -- Ex: "acme-corp/sdr"
+  rag_config jsonb DEFAULT '{
+    "chunk_size": 1000,
+    "chunk_overlap": 200,
+    "top_k": 5,
+    "min_similarity": 0.7
+  }'::jsonb,
+
+  -- Geração de Imagens (se habilitado)
+  image_gen_provider text DEFAULT 'google'::text,
+  image_gen_model text DEFAULT 'imagen-3.0-generate-001'::text,
+  image_gen_config jsonb DEFAULT '{
+    "size": "1024x1024",
+    "quality": "standard",
+    "style": "vivid"
+  }'::jsonb,
+
+  -- Configuração Operacional
+  buffer_delay integer DEFAULT 1 NOT NULL, -- Segundos para agrupar mensagens
+  
+  -- Rate Limits & Quotas (por agente)
+  rate_limits jsonb DEFAULT '{
+    "requests_per_minute": 60,
+    "requests_per_day": 10000,
+    "tokens_per_month": 1000000,
+    "images_per_month": 100
+  }'::jsonb,
+
+  -- Configurações Específicas de Ferramentas
+  google_calendar_id text, -- Ex: "vendas@acme.com"
+  google_sheet_id text,
+  
+  crm_type text, -- 'pipedrive', 'hubspot', 'rd_station'
+  crm_config jsonb, -- {api_key_vault_id: uuid, pipeline_id: 123}
+
+  -- Metadata Adicional
+  notes text,
+  tags text[], -- Ex: {"priority", "beta", "24x7"}
+  custom_fields jsonb,
+
+  -- Constraint: client_id + agent_id deve ser único
+  CONSTRAINT unique_client_agent UNIQUE (client_id, agent_id)
+);
+
+-- Índices para Performance
+CREATE INDEX idx_agents_client_id ON public.agents(client_id);
+CREATE INDEX idx_agents_agent_id ON public.agents(agent_id);
+CREATE INDEX idx_agents_composite ON public.agents(client_id, agent_id);
+CREATE INDEX idx_agents_package ON public.agents(package);
+CREATE INDEX idx_agents_is_active ON public.agents(is_active) WHERE is_active = true;
+CREATE INDEX idx_agents_rag_namespace ON public.agents(rag_namespace);
+
+-- Comentários Explicativos
+COMMENT ON TABLE public.agents IS 
+  'Agentes especializados de cada cliente. Permite múltiplos agentes por cliente.';
+
+COMMENT ON COLUMN public.agents.client_id IS 
+  'FK para clients.client_id. Identifica a qual cliente este agente pertence.';
+
+COMMENT ON COLUMN public.agents.agent_id IS 
+  'Identificador do agente dentro do cliente. Ex: "sdr", "support", "billing".';
+
+COMMENT ON COLUMN public.agents.system_prompt IS 
+  'Prompt de sistema COMPLETO que define persona específica deste agente.';
+
+COMMENT ON COLUMN public.agents.tools_enabled IS 
+  'Array JSON com ferramentas específicas deste agente. Diferentes agentes = ferramentas diferentes.';
+
+COMMENT ON COLUMN public.agents.rag_namespace IS 
+  'Namespace único no vector store. Formato: "{client_id}/{agent_id}". Ex: "acme-corp/sdr".';
+
+-- Trigger para atualizar updated_at
+CREATE TRIGGER on_agents_updated 
+  BEFORE UPDATE ON public.agents 
+  FOR EACH ROW 
+  EXECUTE FUNCTION public.handle_updated_at();
+
+-- RLS (Row Level Security)
+ALTER TABLE public.agents ENABLE ROW LEVEL SECURITY;
+
+-- Policy exemplo
+-- CREATE POLICY "Usuários veem apenas agentes do seu cliente"
+--   ON public.agents FOR SELECT
+--   USING (client_id = (auth.jwt() ->> 'client_id'));
+
+**Migração de Dados: Clients → Agents**
+
+Para clientes existentes, migrar campos específicos de agente:
+
+```sql
+-- Migração: Criar agente padrão para cada cliente existente
+INSERT INTO public.agents (
+  client_id,
+  agent_id,
+  agent_name,
+  package,
+  system_prompt,
+  llm_provider,
+  llm_model,
+  llm_config,
+  tools_enabled,
+  rag_namespace,
+  rag_config,
+  image_gen_provider,
+  image_gen_model,
+  image_gen_config,
+  buffer_delay,
+  rate_limits,
+  google_calendar_id,
+  google_sheet_id,
+  crm_type,
+  crm_config,
+  notes,
+  tags,
+  custom_fields
+)
+SELECT 
+  client_id,
+  'default' as agent_id, -- Agente padrão
+  'Agente Principal' as agent_name,
+  package,
+  system_prompt,
+  llm_provider,
+  llm_model,
+  llm_config,
+  tools_enabled,
+  rag_namespace,
+  rag_config,
+  image_gen_provider,
+  image_gen_model,
+  image_gen_config,
+  buffer_delay,
+  rate_limits,
+  google_calendar_id,
+  google_sheet_id,
+  crm_type,
+  crm_config,
+  notes,
+  tags,
+  custom_fields
+FROM public.clients;
+
+-- Atualizar rag_namespace para novo formato
+UPDATE public.agents 
+SET rag_namespace = client_id || '/default'
+WHERE agent_id = 'default';
+
+-- Após migração, remover campos duplicados da tabela clients
+ALTER TABLE public.clients 
+  DROP COLUMN IF EXISTS system_prompt,
+  DROP COLUMN IF EXISTS llm_provider,
+  DROP COLUMN IF EXISTS llm_model,
+  DROP COLUMN IF EXISTS llm_config,
+  DROP COLUMN IF EXISTS tools_enabled,
+  DROP COLUMN IF EXISTS rag_namespace,
+  DROP COLUMN IF EXISTS rag_config,
+  DROP COLUMN IF EXISTS image_gen_provider,
+  DROP COLUMN IF EXISTS image_gen_model,
+  DROP COLUMN IF EXISTS image_gen_config,
+  DROP COLUMN IF EXISTS buffer_delay,
+  DROP COLUMN IF EXISTS google_calendar_id,
+  DROP COLUMN IF EXISTS google_sheet_id,
+  DROP COLUMN IF EXISTS crm_type,
+  DROP COLUMN IF EXISTS crm_config;
+```
+
+**Exemplo de Query Atualizada:**
+
+```sql
+-- ANTES (buscar config do cliente)
+SELECT system_prompt, tools_enabled, rag_namespace
+FROM clients 
+WHERE client_id = 'acme-corp';
+
+-- AGORA (buscar config do agente específico)
+SELECT a.system_prompt, a.tools_enabled, a.rag_namespace
+FROM agents a
+WHERE a.client_id = 'acme-corp' 
+  AND a.agent_id = 'sdr';
+```
+
+Tabela 3: packages (Templates de Agentes)
 sql-- ============================================================================
 -- TABELA: public.packages
 -- DESCRIÇÃO: Define os "produtos" que você vende. Cada package = tipo de agente
@@ -5505,6 +5858,967 @@ Webhook: /webhook/gestor-ia/chatwoot?client_id=xxx
 5. Retorna resposta via Chatwoot API:
    POST /api/v1/accounts/{account_id}/conversations/{conversation_id}/messages
    Body: {content: "resposta do agente", private: false}
+9.6 Priorização de Implementação
+
+### 9.2.5 WhatsApp Business Cloud API (Meta Oficial)
+
+**Alternativa Oficial ao Evolution API**
+
+O WhatsApp Business Cloud API é a solução oficial da Meta para empresas. Diferente do Evolution API (não-oficial), oferece compliance total e recursos enterprise.
+
+**Comparação: Evolution vs Meta Cloud API**
+
+| Aspecto | Evolution API | WhatsApp Business Cloud API |
+|---------|---------------|----------------------------|
+| **Oficial?** | ❌ Não-oficial (automação Baileys) | ✅ Oficial da Meta |
+| **Custo** | Grátis (self-hosted) | $0.0036/conversa (1000 grátis/mês) |
+| **Compliance** | ⚠️ Risco de ban | ✅ Totalmente compliance |
+| **Setup** | Simples (QR Code) | Complexo (Business Manager) |
+| **Recursos** | Básico (texto, mídia) | Avançado (templates, botões, listas) |
+| **Escalabilidade** | Limitado (~1000 msgs/dia) | Ilimitado (com aprovação) |
+| **Support** | Comunidade | Meta oficial |
+| **Recomendado para** | MVP, testes, baixo volume | Produção, empresas, compliance |
+
+**Setup do WhatsApp Business Cloud API:**
+
+```yaml
+Requisitos:
+  1. Facebook Business Manager
+  2. WhatsApp Business Account
+  3. Número de telefone dedicado (+55 não pode ser número pessoal)
+  4. Verificação de negócio (Business Verification)
+
+Passos:
+  1. Criar Meta App no developers.facebook.com
+  2. Adicionar produto "WhatsApp"
+  3. Configurar número de telefone
+  4. Gerar token de acesso permanente
+  5. Configurar webhook
+  6. Aprovar mensagem templates (obrigatório para iniciar conversas)
+```
+
+**Webhook Configuration:**
+
+```javascript
+// URL do webhook
+https://n8n.seudominio.com/webhook/whatsapp-cloud
+
+// Verify Token (custom)
+const VERIFY_TOKEN = "whatsapp-cloud-verify-token-123";
+
+// Subscription Fields
+- messages
+- message_status (delivered, read, failed)
+
+// Formato do Webhook (incoming message)
+{
+  "object": "whatsapp_business_account",
+  "entry": [{
+    "id": "WHATSAPP_BUSINESS_ACCOUNT_ID",
+    "changes": [{
+      "value": {
+        "messaging_product": "whatsapp",
+        "metadata": {
+          "display_phone_number": "5511999999999",
+          "phone_number_id": "PHONE_NUMBER_ID"
+        },
+        "contacts": [{
+          "profile": {
+            "name": "João Silva"
+          },
+          "wa_id": "5511888888888"
+        }],
+        "messages": [{
+          "from": "5511888888888",
+          "id": "wamid.xxx",
+          "timestamp": "1699999999",
+          "type": "text",
+          "text": {
+            "body": "Olá, preciso de ajuda"
+          }
+        }]
+      },
+      "field": "messages"
+    }]
+  }]
+}
+```
+
+**Adapter: WF Gestor WhatsApp Cloud**
+
+```javascript
+// Node 1: Webhook Verification (GET)
+if ($httpMethod === 'GET') {
+  const mode = $json.query['hub.mode'];
+  const token = $json.query['hub.verify_token'];
+  const challenge = $json.query['hub.challenge'];
+
+  if (mode === 'subscribe' && token === VERIFY_TOKEN) {
+    return parseInt(challenge); // Meta exige número, não string
+  } else {
+    return { status: 403 };
+  }
+}
+
+// Node 2: Parse Incoming Message (POST)
+const entry = $json.body.entry[0];
+const changes = entry.changes[0];
+const value = changes.value;
+
+// Ignorar status updates (delivered, read)
+if (!value.messages) {
+  return { status: 200 }; // ACK
+}
+
+const message = value.messages[0];
+const contact = value.contacts[0];
+
+// Extrair client_id do phone_number_id (mapping)
+const phone_number_id = value.metadata.phone_number_id;
+const client_mapping = await getClientByPhoneNumberId(phone_number_id);
+
+if (!client_mapping) {
+  console.log(`[WHATSAPP_CLOUD] Unknown phone_number_id: ${phone_number_id}`);
+  return { status: 200 }; // ACK anyway
+}
+
+const message_data = {
+  client_id: client_mapping.client_id,
+  agent_id: client_mapping.agent_id, // Suporta múltiplos agentes
+  conversation_id: message.from,
+  message_id: message.id,
+  from: message.from,
+  timestamp: parseInt(message.timestamp) * 1000, // Converter para ms
+  
+  // Tipo de mensagem
+  message_type: message.type, // 'text', 'image', 'audio', 'video', 'document'
+  
+  // Conteúdo (depende do tipo)
+  message: extractMessageContent(message),
+  
+  // Mídia (se houver)
+  media: extractMediaInfo(message),
+  
+  // Metadata
+  contact_name: contact.profile.name,
+  channel_type: 'whatsapp_cloud',
+  channel_metadata: {
+    phone_number_id: phone_number_id,
+    business_account_id: entry.id
+  }
+};
+
+// Node 3: Download Media (se aplicável)
+if (message_data.media && message_data.media.id) {
+  // Meta Cloud API: 2-step process
+  // Step 1: Get media URL
+  const media_url_response = await fetch(
+    `https://graph.facebook.com/v18.0/${message_data.media.id}`,
+    {
+      headers: {
+        'Authorization': `Bearer ${ACCESS_TOKEN}`
+      }
+    }
+  );
+  
+  const media_info = await media_url_response.json();
+  
+  // Step 2: Download media
+  const media_download_response = await fetch(
+    media_info.url,
+    {
+      headers: {
+        'Authorization': `Bearer ${ACCESS_TOKEN}`
+      }
+    }
+  );
+  
+  const media_buffer = await media_download_response.buffer();
+  
+  // Upload para Supabase Storage
+  const storage_url = await uploadToStorage(
+    media_buffer,
+    message_data.media.mime_type,
+    `${client_id}/${agent_id}/${conversation_id}/${message_id}`
+  );
+  
+  message_data.media.url = storage_url;
+}
+
+// Node 4: Call WF 0 Gestor Universal
+return message_data;
+```
+
+**Envio de Mensagens (Response):**
+
+```javascript
+// Texto simples
+await fetch(
+  `https://graph.facebook.com/v18.0/${PHONE_NUMBER_ID}/messages`,
+  {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${ACCESS_TOKEN}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      messaging_product: "whatsapp",
+      recipient_type: "individual",
+      to: conversation_id,
+      type: "text",
+      text: {
+        preview_url: true,
+        body: response_text
+      }
+    })
+  }
+);
+
+// Imagem
+await fetch(
+  `https://graph.facebook.com/v18.0/${PHONE_NUMBER_ID}/messages`,
+  {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${ACCESS_TOKEN}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      messaging_product: "whatsapp",
+      recipient_type: "individual",
+      to: conversation_id,
+      type: "image",
+      image: {
+        link: image_url, // URL público da imagem
+        caption: "Aqui está a imagem que você pediu!"
+      }
+    })
+  }
+);
+
+// Audio
+await fetch(
+  `https://graph.facebook.com/v18.0/${PHONE_NUMBER_ID}/messages`,
+  {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${ACCESS_TOKEN}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      messaging_product: "whatsapp",
+      recipient_type: "individual",
+      to: conversation_id,
+      type: "audio",
+      audio: {
+        link: audio_url // URL público do áudio
+      }
+    })
+  }
+);
+
+// Template Message (para iniciar conversa)
+await fetch(
+  `https://graph.facebook.com/v18.0/${PHONE_NUMBER_ID}/messages`,
+  {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${ACCESS_TOKEN}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      messaging_product: "whatsapp",
+      to: conversation_id,
+      type: "template",
+      template: {
+        name: "hello_world", // Template pré-aprovado
+        language: {
+          code: "pt_BR"
+        }
+      }
+    })
+  }
+);
+```
+
+**Pricing (Meta Cloud API):**
+
+```yaml
+Conversas Gratuitas: 1000/mês (por WABA)
+
+Preço após limite (Brasil - 2024):
+  - Business-initiated: $0.0370/conversa
+  - User-initiated: $0.0036/conversa
+  
+Janela de Conversa: 24 horas
+  - Dentro de 24h: mesma conversa
+  - Após 24h: nova conversa (cobrada)
+
+Exemplo (100 clientes, 50 msgs/mês cada):
+  - Total conversas: ~500/mês (assumindo 10 msgs/conversa)
+  - Custo: $1.80/mês (dentro do limite grátis)
+  
+Exemplo (1000 clientes, 100 msgs/mês cada):
+  - Total conversas: ~10,000/mês
+  - Custo: ~$36/mês (9000 pagas × $0.0036)
+```
+
+**Quando usar cada opção:**
+
+| Cenário | Recomendação |
+|---------|--------------|
+| MVP/Testes | Evolution API |
+| < 500 conversas/mês | Meta Cloud (grátis) |
+| Compliance obrigatório | Meta Cloud |
+| > 10k conversas/mês | Meta Cloud |
+| Recursos avançados (templates, botões) | Meta Cloud |
+| Budget zero | Evolution API |
+| Rápida prototipação | Evolution API |
+| Produção enterprise | Meta Cloud |
+
+**Implementação Multi-Provider:**
+
+Na tabela `agents`, adicionar campo:
+
+```sql
+ALTER TABLE public.agents 
+ADD COLUMN whatsapp_provider text DEFAULT 'evolution';
+-- Valores: 'evolution', 'cloud_api', 'twilio'
+
+ADD COLUMN whatsapp_config jsonb DEFAULT '{}'::jsonb;
+-- Evolution: {instance_name, api_key}
+-- Cloud API: {phone_number_id, access_token}
+-- Twilio: {account_sid, auth_token, from_number}
+```
+
+No WF 0, detectar provider e rotear:
+
+```javascript
+// Load Agent Config
+const agent = await getAgent(client_id, agent_id);
+
+// Send Response (dynamic routing)
+if (agent.whatsapp_provider === 'cloud_api') {
+  await sendViaCloudAPI(response);
+} else if (agent.whatsapp_provider === 'evolution') {
+  await sendViaEvolution(response);
+} else if (agent.whatsapp_provider === 'twilio') {
+  await sendViaTwilio(response);
+}
+```
+
+---
+
+### 9.7 Processamento de Mídia Input
+
+**Visão Geral:**
+
+O sistema detecta automaticamente o tipo de mídia recebida e aplica processamento especializado para extrair conteúdo utilizável pelo agente.
+
+**Tipos Suportados:**
+
+| Tipo | Formatos | Processamento | API/Tool |
+|------|----------|--------------|----------|
+| **Áudio** | .mp3, .ogg, .wav, .m4a | Speech-to-Text | Google Cloud Speech-to-Text |
+| **Imagem** | .jpg, .png, .webp, .gif | Vision Analysis | Google Gemini Vision (nativo) |
+| **Vídeo** | .mp4, .mov, .avi | Frame extraction + Vision | Google Gemini Video (nativo) |
+| **Documento** | .pdf, .docx, .txt | Text extraction | pdf-parse / Document AI |
+
+**Fluxo de Processamento (WF 0 - Fase 1):**
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│ Incoming Message                                                 │
+│ ├─ type: "image"                                                │
+│ ├─ media: { url: "https://...", mime_type: "image/jpeg" }       │
+│ └─ text: "" (vazio ou caption)                                  │
+└────────────────┬────────────────────────────────────────────────┘
+                 │
+                 ▼
+┌─────────────────────────────────────────────────────────────────┐
+│ Node: Detect Media Type                                          │
+│ ─────────────────────────────────────────────────────────────    │
+│ const media_type = message.media?.mime_type;                     │
+│                                                                  │
+│ if (media_type?.startsWith('audio/')) {                          │
+│   route_to = 'process_audio';                                   │
+│ } else if (media_type?.startsWith('image/')) {                  │
+│   route_to = 'process_image';                                   │
+│ } else if (media_type?.startsWith('video/')) {                  │
+│   route_to = 'process_video';                                   │
+│ } else if (media_type === 'application/pdf' || ...) {           │
+│   route_to = 'process_document';                                │
+│ } else {                                                         │
+│   route_to = 'process_text';                                    │
+│ }                                                                │
+└────┬─────────────────┬──────────────┬──────────────┬────────────┘
+     │                 │              │              │
+     ▼                 ▼              ▼              ▼
+┌─────────┐    ┌──────────┐   ┌──────────┐   ┌──────────────┐
+│ Audio   │    │ Image    │   │ Video    │   │ Document     │
+│ STT     │    │ Vision   │   │ Analysis │   │ Parse        │
+└─────────┘    └──────────┘   └──────────┘   └──────────────┘
+```
+
+**1. Áudio → Speech-to-Text**
+
+```javascript
+// Node: Process Audio (Speech-to-Text)
+
+const audio_url = message.media.url; // URL do Supabase Storage
+const audio_buffer = await downloadFile(audio_url);
+
+// Google Cloud Speech-to-Text
+const speech_client = new speech.SpeechClient({
+  credentials: google_credentials
+});
+
+const audio_bytes = audio_buffer.toString('base64');
+
+const request = {
+  audio: {
+    content: audio_bytes
+  },
+  config: {
+    encoding: 'OGG_OPUS', // Detectar automaticamente do mime_type
+    sampleRateHertz: 16000,
+    languageCode: 'pt-BR',
+    alternativeLanguageCodes: ['en-US', 'es-ES'],
+    enableAutomaticPunctuation: true,
+    model: 'latest_long' // Melhor para conversas
+  }
+};
+
+const [response] = await speech_client.recognize(request);
+
+const transcription = response.results
+  .map(result => result.alternatives[0].transcript)
+  .join('\n');
+
+// Adicionar transcrição ao contexto
+message.text = transcription;
+message.original_media_type = 'audio';
+message.transcription_confidence = response.results[0]?.alternatives[0]?.confidence || 0;
+
+console.log(`[STT] Transcribed: "${transcription}"`);
+
+// Custo: ~$0.006/minuto
+// Latência: ~2-5 segundos
+```
+
+**2. Imagem → Vision Analysis**
+
+```javascript
+// Node: Process Image (Gemini Vision)
+
+const image_url = message.media.url;
+
+// Gemini suporta análise de imagem NATIVA
+// Não precisa de API separada, enviar direto no prompt
+
+// Preparar payload multimodal
+message.multimodal_content = [
+  {
+    type: 'image_url',
+    image_url: {
+      url: image_url
+    }
+  },
+  {
+    type: 'text',
+    text: message.text || 'Descreva esta imagem e responda à solicitação do usuário.'
+  }
+];
+
+message.original_media_type = 'image';
+
+// O Gemini 2.0 Flash processa isso NATIVAMENTE
+// Não precisa de step adicional!
+
+console.log(`[VISION] Image ready for multimodal processing: ${image_url}`);
+
+// Custo: Incluído no custo do Gemini (~$0.075/1M input tokens)
+// Latência: Mesma do texto (~1-2s)
+```
+
+**3. Vídeo → Gemini Video**
+
+```javascript
+// Node: Process Video (Gemini Video)
+
+const video_url = message.media.url;
+
+// Gemini 2.0 suporta vídeo NATIVO
+// Pode analisar até 1 hora de vídeo
+
+message.multimodal_content = [
+  {
+    type: 'video_url',
+    video_url: {
+      url: video_url
+    }
+  },
+  {
+    type: 'text',
+    text: message.text || 'Analise este vídeo e responda à solicitação do usuário.'
+  }
+];
+
+message.original_media_type = 'video';
+
+console.log(`[VIDEO] Video ready for multimodal processing: ${video_url}`);
+
+// Custo: Incluído no Gemini (~$0.075/1M input tokens)
+// Latência: ~5-15s dependendo do tamanho
+```
+
+**4. Documento → Text Extraction**
+
+```javascript
+// Node: Process Document (PDF/DOCX)
+
+const doc_url = message.media.url;
+const doc_buffer = await downloadFile(doc_url);
+const mime_type = message.media.mime_type;
+
+let extracted_text = '';
+
+if (mime_type === 'application/pdf') {
+  // Opção 1: pdf-parse (simple, grátis)
+  const pdf = require('pdf-parse');
+  const data = await pdf(doc_buffer);
+  extracted_text = data.text;
+  
+  // Opção 2: Google Document AI (mais preciso, pago)
+  // const documentai = require('@google-cloud/documentai');
+  // const client = new documentai.DocumentProcessorServiceClient();
+  // ...
+  
+} else if (mime_type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
+  // DOCX
+  const mammoth = require('mammoth');
+  const result = await mammoth.extractRawText({ buffer: doc_buffer });
+  extracted_text = result.value;
+  
+} else if (mime_type === 'text/plain') {
+  extracted_text = doc_buffer.toString('utf-8');
+}
+
+// Adicionar texto extraído ao contexto
+message.text = extracted_text;
+message.original_media_type = 'document';
+
+console.log(`[DOCUMENT] Extracted ${extracted_text.length} chars from ${mime_type}`);
+
+// Custo: Grátis (pdf-parse/mammoth) ou $1.50/1000 pages (Document AI)
+// Latência: ~1-3s
+```
+
+**Integração com WF 0:**
+
+```javascript
+// Node: Load Agent Config (modificado)
+
+// Após processar mídia, verificar se agente suporta multimodal
+const agent = await getAgent(client_id, agent_id);
+
+if (message.multimodal_content && agent.llm_model.includes('gemini')) {
+  // Gemini suporta nativo, passar direto
+  message.use_multimodal = true;
+} else if (message.multimodal_content) {
+  // LLM não suporta multimodal, usar texto extraído
+  message.text = `[Usuário enviou ${message.original_media_type}]\n${message.text}`;
+  message.use_multimodal = false;
+}
+
+// Node: Call LLM (modificado)
+
+if (message.use_multimodal) {
+  // Payload multimodal para Gemini
+  const llm_request = {
+    model: agent.llm_model,
+    contents: [{
+      role: 'user',
+      parts: message.multimodal_content // Array de {type, image_url/video_url/text}
+    }],
+    systemInstruction: {
+      parts: [{ text: agent.system_prompt }]
+    }
+  };
+} else {
+  // Payload texto normal
+  const llm_request = {
+    model: agent.llm_model,
+    contents: [{
+      role: 'user',
+      parts: [{ text: message.text }]
+    }],
+    systemInstruction: {
+      parts: [{ text: agent.system_prompt }]
+    }
+  };
+}
+```
+
+**Custos de Processamento:**
+
+| Tipo | API | Custo | Exemplo (100 msgs/dia) |
+|------|-----|-------|------------------------|
+| Áudio (30s avg) | Speech-to-Text | $0.006/min | $0.90/mês |
+| Imagem | Gemini (nativo) | Incluído | $0.00 |
+| Vídeo (30s avg) | Gemini (nativo) | Incluído | $0.00 |
+| PDF (10 pages) | pdf-parse | Grátis | $0.00 |
+| **Total** | | | **$0.90/mês** |
+
+**Benefícios:**
+
+✅ Agente entende áudio, imagem, vídeo, documentos
+✅ UX muito melhor (usuário não precisa digitar)
+✅ Casos de uso avançados (análise de fotos, transcrição de áudio)
+✅ Custo baixo (Gemini Vision/Video incluído)
+
+---
+
+### 9.8 Processamento de Mídia Output
+
+**Visão Geral:**
+
+O agente pode gerar e enviar mídia (imagens, áudio) como resposta, além de texto.
+
+**Tipos Suportados:**
+
+| Tipo | Geração | API/Tool | Uso |
+|------|---------|----------|-----|
+| **Imagem** | Text-to-Image | Imagen 3.0 (Google) ou DALL-E 3 (OpenAI) | Gráficos, ilustrações, memes |
+| **Áudio** | Text-to-Speech | Google Cloud TTS | Mensagens de voz |
+
+**1. Geração de Imagens (Tool: image_generate)**
+
+```javascript
+// Tool Definition (no system_prompt)
+{
+  name: "image_generate",
+  description: "Gera uma imagem a partir de uma descrição em texto. Use para criar ilustrações, gráficos, memes ou qualquer conteúdo visual solicitado pelo usuário.",
+  parameters: {
+    type: "object",
+    properties: {
+      prompt: {
+        type: "string",
+        description: "Descrição detalhada da imagem a ser gerada. Seja específico sobre cores, estilo, composição."
+      },
+      size: {
+        type: "string",
+        enum: ["1024x1024", "1792x1024", "1024x1792"],
+        default: "1024x1024",
+        description: "Tamanho da imagem"
+      },
+      style: {
+        type: "string",
+        enum: ["realistic", "artistic", "cartoon", "professional"],
+        default: "realistic",
+        description: "Estilo visual da imagem"
+      }
+    },
+    required: ["prompt"]
+  }
+}
+
+// Implementação (WF 0 - Part 2: Tools)
+
+async function executeImageGenerate(params, agent_config) {
+  const provider = agent_config.image_gen_provider || 'google';
+  
+  if (provider === 'google') {
+    // Google Imagen 3.0
+    const vertexai = new VertexAI({
+      project: GOOGLE_PROJECT_ID,
+      location: 'us-central1'
+    });
+    
+    const generativeVisionModel = vertexai.preview.getGenerativeModel({
+      model: agent_config.image_gen_model || 'imagen-3.0-generate-001'
+    });
+    
+    const result = await generativeVisionModel.generateImages({
+      prompt: params.prompt,
+      numberOfImages: 1,
+      aspectRatio: params.size === '1792x1024' ? '16:9' : 
+                    params.size === '1024x1792' ? '9:16' : '1:1',
+      sampleCount: 1
+    });
+    
+    const image_base64 = result.images[0].imageBytes;
+    
+    // Upload para Supabase Storage
+    const image_url = await uploadImageToStorage(
+      image_base64,
+      agent_config.client_id,
+      agent_config.agent_id,
+      'generated'
+    );
+    
+    return {
+      success: true,
+      image_url: image_url,
+      prompt: params.prompt,
+      provider: 'google_imagen',
+      cost_usd: 0.04 // $0.04 por imagem (Imagen 3.0)
+    };
+    
+  } else if (provider === 'openai') {
+    // OpenAI DALL-E 3
+    const openai = new OpenAI({ apiKey: OPENAI_API_KEY });
+    
+    const response = await openai.images.generate({
+      model: "dall-e-3",
+      prompt: params.prompt,
+      n: 1,
+      size: params.size,
+      quality: "standard"
+    });
+    
+    const image_url = response.data[0].url; // URL temporária
+    
+    // Download e upload para Supabase
+    const final_url = await downloadAndReupload(image_url, ...);
+    
+    return {
+      success: true,
+      image_url: final_url,
+      prompt: params.prompt,
+      provider: 'openai_dalle',
+      cost_usd: 0.04 // $0.04 por imagem (DALL-E 3 standard)
+    };
+  }
+}
+
+// Exemplo de Uso (pelo agente)
+
+User: "Crie uma imagem de um gato astronauta no espaço"
+
+Agent (via function calling):
+{
+  "tool_calls": [{
+    "name": "image_generate",
+    "arguments": {
+      "prompt": "A cute orange cat wearing a white astronaut suit, floating in space with Earth visible in the background, stars and nebulae, realistic style, high quality",
+      "size": "1024x1024",
+      "style": "realistic"
+    }
+  }]
+}
+
+// WF 0 executa tool, retorna resultado
+{
+  "success": true,
+  "image_url": "https://xxx.supabase.co/storage/v1/object/public/media/acme/sdr/generated/img_123.png"
+}
+
+// Agent responde
+"Aqui está a imagem do gato astronauta! 🚀🐱"
+[Envia imagem via WhatsApp/Chatwoot]
+```
+
+**2. Geração de Áudio (Tool: tts_generate)**
+
+```javascript
+// Tool Definition
+{
+  name: "tts_generate",
+  description: "Converte texto em áudio (mensagem de voz). Use para enviar mensagens de voz quando solicitado ou quando áudio for mais apropriado que texto.",
+  parameters: {
+    type: "object",
+    properties: {
+      text: {
+        type: "string",
+        description: "Texto a ser convertido em áudio. Máximo 5000 caracteres."
+      },
+      voice: {
+        type: "string",
+        enum: ["pt-BR-Standard-A", "pt-BR-Wavenet-A", "pt-BR-Neural2-A"],
+        default: "pt-BR-Wavenet-A",
+        description: "Voz a ser usada. Wavenet = melhor qualidade, Standard = mais barato."
+      },
+      speed: {
+        type: "number",
+        default: 1.0,
+        description: "Velocidade da fala. 1.0 = normal, 1.2 = 20% mais rápido."
+      }
+    },
+    required: ["text"]
+  }
+}
+
+// Implementação (Google Cloud TTS)
+
+async function executeTTSGenerate(params, agent_config) {
+  const textToSpeech = new TextToSpeechClient({
+    credentials: google_credentials
+  });
+  
+  const request = {
+    input: { text: params.text },
+    voice: {
+      languageCode: 'pt-BR',
+      name: params.voice || 'pt-BR-Wavenet-A',
+      ssmlGender: 'NEUTRAL'
+    },
+    audioConfig: {
+      audioEncoding: 'OGG_OPUS', // Formato do WhatsApp
+      speakingRate: params.speed || 1.0,
+      pitch: 0
+    }
+  };
+  
+  const [response] = await textToSpeech.synthesizeSpeech(request);
+  
+  const audio_buffer = response.audioContent;
+  
+  // Upload para Supabase Storage
+  const audio_url = await uploadAudioToStorage(
+    audio_buffer,
+    agent_config.client_id,
+    agent_config.agent_id,
+    'generated'
+  );
+  
+  // Calcular custo
+  const char_count = params.text.length;
+  const cost_usd = (char_count / 1000000) * 16; // $16/1M chars (Wavenet)
+  
+  return {
+    success: true,
+    audio_url: audio_url,
+    text: params.text,
+    duration_estimate: Math.ceil(char_count / 15), // ~15 chars/segundo
+    voice: params.voice,
+    cost_usd: cost_usd
+  };
+}
+
+// Exemplo de Uso
+
+User: "Me envie isso em áudio, por favor"
+
+Agent (via function calling):
+{
+  "tool_calls": [{
+    "name": "tts_generate",
+    "arguments": {
+      "text": "Claro! Aqui está a informação em áudio: o horário de funcionamento da loja é de segunda a sexta, das 9h às 18h, e aos sábados das 9h às 13h.",
+      "voice": "pt-BR-Wavenet-A"
+    }
+  }]
+}
+
+// WF 0 executa, retorna resultado
+{
+  "success": true,
+  "audio_url": "https://xxx.supabase.co/storage/v1/object/public/media/acme/sdr/generated/audio_123.ogg",
+  "duration_estimate": 12 // segundos
+}
+
+// Agent envia áudio via WhatsApp
+[Áudio de 12 segundos]
+```
+
+**Envio de Mídia Output (WF 0 - Part 3: Response)**
+
+```javascript
+// Node: Send Response (modificado)
+
+const response_data = {
+  text: agent_response.text,
+  attachments: [] // Novo campo
+};
+
+// Verificar se agente gerou mídia (via tools)
+if (agent_response.tool_results) {
+  for (const tool_result of agent_response.tool_results) {
+    if (tool_result.tool_name === 'image_generate' && tool_result.success) {
+      response_data.attachments.push({
+        type: 'image',
+        url: tool_result.image_url,
+        caption: agent_response.text
+      });
+    } else if (tool_result.tool_name === 'tts_generate' && tool_result.success) {
+      response_data.attachments.push({
+        type: 'audio',
+        url: tool_result.audio_url
+      });
+    }
+  }
+}
+
+// Enviar via canal apropriado
+if (channel_type === 'whatsapp_cloud') {
+  // WhatsApp Cloud API
+  for (const attachment of response_data.attachments) {
+    if (attachment.type === 'image') {
+      await sendWhatsAppImage(conversation_id, attachment.url, attachment.caption);
+    } else if (attachment.type === 'audio') {
+      await sendWhatsAppAudio(conversation_id, attachment.url);
+    }
+  }
+  
+  // Enviar texto (se houver e não foi como caption)
+  if (response_data.text && !response_data.attachments.length) {
+    await sendWhatsAppText(conversation_id, response_data.text);
+  }
+  
+} else if (channel_type === 'chatwoot') {
+  // Chatwoot API
+  await sendChatwootMessage(
+    conversation_id,
+    response_data.text,
+    response_data.attachments
+  );
+}
+```
+
+**Custos de Geração:**
+
+| Tipo | Provider | Custo | Exemplo (10 geradas/dia) |
+|------|----------|-------|--------------------------|
+| Imagem 1024x1024 | Imagen 3.0 | $0.04/imagem | $12/mês |
+| Imagem 1024x1024 | DALL-E 3 | $0.04/imagem | $12/mês |
+| Áudio (100 chars) | TTS Wavenet | $0.0016/100 chars | $4.80/mês |
+| Áudio (100 chars) | TTS Standard | $0.0004/100 chars | $1.20/mês |
+
+**Casos de Uso:**
+
+- **Imagens:** Gráficos de performance, ilustrações de produtos, memes personalizados
+- **Áudio:** Mensagens de voz para idosos, conteúdo educacional, acessibilidade
+
+---
+
+### 9.9 Chatwoot Hub Central Setup
+
+**Arquitetura Recomendada: Chatwoot como Hub Central**
+
+Ao invés de múltiplos webhooks diretos, use **Chatwoot como hub central** para todos os canais. Ver **GAPS.md seção 2** para implementação completa.
+
+**Benefícios do Chatwoot Hub:**
+
+✅ **1 webhook único** (vs 5+ webhooks)  
+✅ **Dashboard unificado** para monitorar todas conversas  
+✅ **Handoff humano nativo** (agente → humano com 1 clique)  
+✅ **Histórico centralizado** (todas conversas em 1 lugar)  
+✅ **70% menos código** (1 adapter vs múltiplos)  
+✅ **Roteamento inteligente** (inbox → agent_id)
+
+**Comparação: Antes vs Chatwoot Hub**
+
+| Aspecto | ❌ Webhooks Diretos | ✅ Chatwoot Hub |
+|---------|---------------------|-----------------|
+| **Webhooks** | 5+ diferentes | 1 único |
+| **Código** | 5+ adapters | 1 adapter |
+| **Dashboard** | Nenhum (ou custom) | Chatwoot nativo |
+| **Handoff Humano** | Complexo (custom) | Nativo (1 clique) |
+| **Multi-Agente** | Difícil | Custom attribute |
+
+---
+
 9.6 Priorização de Implementação
 MVP (1 semana):
 

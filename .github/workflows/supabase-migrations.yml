@@ -1,0 +1,48 @@
+name: Run Supabase Migrations
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'database/migrations/**'
+  workflow_dispatch: # Permite execução manual
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Run migrations
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+          SUPABASE_PROJECT_ID: ${{ secrets.SUPABASE_PROJECT_ID }}
+        run: |
+          echo "🚀 Iniciando migrations..."
+          
+          # Link to Supabase project
+          supabase link --project-ref $SUPABASE_PROJECT_ID
+          
+          # Run migrations in order
+          echo "📦 Migration 001: Creating agents table..."
+          supabase db push
+          
+          echo "✅ Migrations completed successfully!"
+
+      - name: Validate migrations
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+          SUPABASE_PROJECT_ID: ${{ secrets.SUPABASE_PROJECT_ID }}
+        run: |
+          echo "🔍 Validating database integrity..."
+          supabase db push --dry-run
