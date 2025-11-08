@@ -10,7 +10,10 @@ param(
     [string]$WebhookUrl = "https://n8n.evolutedigital.com.br/webhook/chatwoot-webhook",
     
     [Parameter(Mandatory=$false)]
-    [string]$MessageBody = "qual o preço?"
+    [string]$MessageBody = "qual o preço?",
+    
+    [Parameter(Mandatory=$false)]
+    [int]$ConversationId = 1
 )
 
 # Colors
@@ -38,6 +41,9 @@ Write-Host ""
 Write-Host "📝 Message Body:" -ForegroundColor $InfoColor
 Write-Host "   '$MessageBody'" -ForegroundColor $WarningColor
 Write-Host ""
+Write-Host "💬 Conversation ID:" -ForegroundColor $InfoColor
+Write-Host "   $ConversationId" -ForegroundColor $WarningColor
+Write-Host ""
 
 # Payload simulando Chatwoot
 $payload = @{
@@ -46,7 +52,7 @@ $payload = @{
     content = $MessageBody
     content_type = "text"
     conversation = @{
-        id = 99999
+        id = $ConversationId
         status = "open"
         custom_attributes = @{
             client_id = "clinica_sorriso_001"
