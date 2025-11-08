@@ -564,6 +564,19 @@
     },
     {
       "parameters": {
+        "jsCode": "// DEBUG CRÍTICO: O QUE ESTÁ NO $json ANTES DO IF?\nconst data = $input.item.json;\n\nconsole.log('=== DEBUG CRÍTICO ANTES DO IF ===');\nconsole.log('TUDO que está em $json:', JSON.stringify(data, null, 2));\nconsole.log('---');\nconsole.log('client_media_attachments existe?', data.client_media_attachments !== undefined);\nconsole.log('client_media_attachments valor:', data.client_media_attachments);\nconsole.log('client_media_attachments é array?', Array.isArray(data.client_media_attachments));\nconsole.log('client_media_attachments.length:', (data.client_media_attachments || []).length);\nconsole.log('Expressão do IF:', (data.client_media_attachments || []).length > 0 ? 'TRUE ✅' : 'FALSE ❌');\n\nreturn { json: data };"
+      },
+      "name": "DEBUG ANTES DO IF",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3100,
+        336
+      ],
+      "id": "debug-before-if-node"
+    },
+    {
+      "parameters": {
         "conditions": {
           "options": {
             "caseSensitive": true,
@@ -589,7 +602,7 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
       "position": [
-        3200,
+        3300,
         336
       ],
       "id": "attachment-check-node"
@@ -602,7 +615,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        3400,
+        3500,
         240
       ],
       "id": "debug-before-download"
@@ -623,7 +636,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        3600,
+        3700,
         240
       ],
       "id": "download-file-node"
