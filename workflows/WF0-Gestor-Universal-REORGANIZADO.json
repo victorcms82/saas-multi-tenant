@@ -574,16 +574,100 @@
     },
     {
       "parameters": {
-        "jsCode": "// 🚧 NODE DESABILITADO TEMPORARIAMENTE\n// Motivo: Chatwoot API requer download do arquivo primeiro\n// TODO: Implementar workflow:\n//   1. Download arquivo do Supabase Storage\n//   2. Converter para Buffer\n//   3. Upload via multipart/form-data\n\nconst data = $input.item.json;\n\nconsole.log('⚠️  ANEXOS NÃO ENVIADOS (node desabilitado)');\nconsole.log('Arquivos disponíveis:', data.client_media_attachments);\nconsole.log('✅ Resposta de texto foi enviada com sucesso');\nconsole.log('📋 LLM mencionou anexo na resposta:', data.final_response);\n\nreturn {\n  json: {\n    ...data,\n    attachments_sent: false,\n    attachments_reason: 'Feature em desenvolvimento - requer download+upload do arquivo'\n  }\n};"
+        "method": "GET",
+        "url": "={{ $json.client_media_attachments[0].file_url }}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "file"
+            }
+          }
+        }
       },
-      "name": "Enviar Anexos Chatwoot (DESABILITADO)",
+      "name": "Download Arquivo do Supabase",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3400,
+        240
+      ],
+      "id": "download-file-node"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://chatwoot.evolutedigital.com.br/api/v1/accounts/1/conversations/{{ $json.conversation_id }}/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "api_access_token",
+              "value": "zL8FNtrajZjGv4LP9BrZiCif"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "message_type",
+              "value": "outgoing"
+            },
+            {
+              "name": "private",
+              "value": "false"
+            }
+          ]
+        },
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": []
+        },
+        "options": {
+          "batching": {
+            "batch": {}
+          },
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        },
+        "attachments": {
+          "attachments": [
+            {
+              "inputDataFieldName": "=data",
+              "name": "attachments[]"
+            }
+          ]
+        }
+      },
+      "name": "Upload Anexo para Chatwoot",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3600,
+        240
+      ],
+      "id": "upload-attachment-node",
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// Log resultado do upload\nconst uploadResponse = $input.item.json;\nconst originalData = $('Log Chatwoot Response').first().json;\n\nconsole.log('=== UPLOAD ANEXO DEBUG ===');\nconsole.log('Status Code:', uploadResponse.statusCode);\nconsole.log('Status Message:', uploadResponse.statusMessage);\n\nif (uploadResponse.statusCode >= 200 && uploadResponse.statusCode < 300) {\n  console.log('✅ Anexo enviado com sucesso!');\n} else {\n  console.error('❌ Erro ao enviar anexo');\n  console.error('Body:', JSON.stringify(uploadResponse.body, null, 2));\n}\n\nreturn {\n  json: {\n    ...originalData,\n    attachment_upload_status: uploadResponse.statusCode,\n    attachment_sent: uploadResponse.statusCode >= 200 && uploadResponse.statusCode < 300\n  }\n};"
+      },
+      "name": "Log Upload Resultado",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        3200,
+        3800,
         240
       ],
-      "id": "send-attachments-node"
+      "id": "log-upload-node"
     },
     {
       "parameters": {
@@ -859,7 +943,29 @@
       "main": [
         [
           {
-            "node": "Enviar Anexos Chatwoot",
+            "node": "Download Arquivo do Supabase",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Download Arquivo do Supabase": {
+      "main": [
+        [
+          {
+            "node": "Upload Anexo para Chatwoot",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upload Anexo para Chatwoot": {
+      "main": [
+        [
+          {
+            "node": "Log Upload Resultado",
             "type": "main",
             "index": 0
           }
