@@ -574,6 +574,19 @@
     },
     {
       "parameters": {
+        "jsCode": "// Debug: Log dados antes do download\nconst data = $input.item.json;\n\nconsole.log('=== DEBUG ANTES DO DOWNLOAD ===');\nconsole.log('client_media_attachments:', JSON.stringify(data.client_media_attachments, null, 2));\nconsole.log('file_url:', data.client_media_attachments[0]?.file_url);\nconsole.log('file_name:', data.client_media_attachments[0]?.file_name);\nconsole.log('file_type:', data.client_media_attachments[0]?.file_type);\n\nreturn { json: data };"
+      },
+      "name": "Debug Antes Download",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3400,
+        240
+      ],
+      "id": "debug-before-download"
+    },
+    {
+      "parameters": {
         "method": "GET",
         "url": "={{ $json.client_media_attachments[0].file_url }}",
         "options": {
@@ -588,7 +601,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        3400,
+        3600,
         240
       ],
       "id": "download-file-node"
@@ -658,7 +671,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Log resultado do upload\nconst uploadResponse = $input.item.json;\nconst originalData = $('Log Chatwoot Response').first().json;\n\nconsole.log('=== UPLOAD ANEXO DEBUG ===');\nconsole.log('Status Code:', uploadResponse.statusCode);\nconsole.log('Status Message:', uploadResponse.statusMessage);\n\nif (uploadResponse.statusCode >= 200 && uploadResponse.statusCode < 300) {\n  console.log('✅ Anexo enviado com sucesso!');\n} else {\n  console.error('❌ Erro ao enviar anexo');\n  console.error('Body:', JSON.stringify(uploadResponse.body, null, 2));\n}\n\nreturn {\n  json: {\n    ...originalData,\n    attachment_upload_status: uploadResponse.statusCode,\n    attachment_sent: uploadResponse.statusCode >= 200 && uploadResponse.statusCode < 300\n  }\n};"
+        "jsCode": "// Log resultado do upload\nconst uploadResponse = $input.item.json;\nconst originalData = $('Log Chatwoot Response').first().json;\n\nconsole.log('=== UPLOAD ANEXO DEBUG ===');\nconsole.log('Upload Response (completo):', JSON.stringify(uploadResponse, null, 2));\nconsole.log('Status Code:', uploadResponse.statusCode);\nconsole.log('Status Message:', uploadResponse.statusMessage);\nconsole.log('Body:', JSON.stringify(uploadResponse.body, null, 2));\nconsole.log('Headers:', JSON.stringify(uploadResponse.headers, null, 2));\n\nif (uploadResponse.statusCode >= 200 && uploadResponse.statusCode < 300) {\n  console.log('✅ Anexo enviado com sucesso!');\n} else {\n  console.error('❌ Erro ao enviar anexo');\n  console.error('Erro detalhado:', uploadResponse.body);\n}\n\nreturn {\n  json: {\n    ...originalData,\n    attachment_upload_status: uploadResponse.statusCode,\n    attachment_upload_body: uploadResponse.body,\n    attachment_sent: uploadResponse.statusCode >= 200 && uploadResponse.statusCode < 300\n  }\n};"
       },
       "name": "Log Upload Resultado",
       "type": "n8n-nodes-base.code",
@@ -940,6 +953,17 @@
       ]
     },
     "Tem Anexos?": {
+      "main": [
+        [
+          {
+            "node": "Debug Antes Download",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Debug Antes Download": {
       "main": [
         [
           {
