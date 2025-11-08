@@ -505,7 +505,17 @@
             }
           ]
         },
-        "options": {}
+        "options": {
+          "redirect": {
+            "redirect": {}
+          },
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        }
       },
       "name": "Enviar Resposta via Chatwoot",
       "type": "n8n-nodes-base.httpRequest",
@@ -514,7 +524,21 @@
         2800,
         336
       ],
-      "id": "24a41b93-1579-469a-9a38-ac575dbcc5a7"
+      "id": "24a41b93-1579-469a-9a38-ac575dbcc5a7",
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// Log de resposta do Chatwoot\nconst chatwootResponse = $input.item.json;\n\nconsole.log('=== CHATWOOT RESPONSE DEBUG ===');\nconsole.log('Status Code:', chatwootResponse.statusCode);\nconsole.log('Status Message:', chatwootResponse.statusMessage);\nconsole.log('Body:', JSON.stringify(chatwootResponse.body, null, 2));\nconsole.log('Headers:', JSON.stringify(chatwootResponse.headers, null, 2));\n\nif (chatwootResponse.statusCode >= 400) {\n  console.error('❌ ERRO ao enviar para Chatwoot!');\n  console.error('Erro:', chatwootResponse.body);\n}\n\n// Preservar dados originais para próximo node\nconst originalData = $('Preservar Dados Após Usage Tracking').first().json;\n\nreturn {\n  json: {\n    ...originalData,\n    chatwoot_status: chatwootResponse.statusCode,\n    chatwoot_sent: chatwootResponse.statusCode >= 200 && chatwootResponse.statusCode < 300\n  }\n};"
+      },
+      "name": "Log Chatwoot Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3000,
+        336
+      ],
+      "id": "log-chatwoot-response"
     },
     {
       "parameters": {
@@ -543,7 +567,7 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
       "position": [
-        3000,
+        3200,
         336
       ],
       "id": "attachment-check-node"
@@ -841,6 +865,17 @@
       ]
     },
     "Enviar Resposta via Chatwoot": {
+      "main": [
+        [
+          {
+            "node": "Log Chatwoot Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Chatwoot Response": {
       "main": [
         [
           {
