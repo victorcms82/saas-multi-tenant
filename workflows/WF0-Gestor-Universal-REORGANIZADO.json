@@ -1,0 +1,791 @@
+{
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "chatwoot-webhook",
+        "options": {}
+      },
+      "name": "Chatwoot Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        -2288,
+        336
+      ],
+      "webhookId": "chatwoot-incoming",
+      "id": "6656744b-6af1-4f07-a3fc-4ca91aadb597"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Identifica cliente, agente e canal\nconst payload = $input.item.json;\n\n// DEBUG: Log payload recebido\nconsole.log('=== DEBUG: Estrutura completa do payload ===');\nconsole.log('payload:', JSON.stringify(payload, null, 2));\nconsole.log('payload.body:', JSON.stringify(payload.body, null, 2));\nconsole.log('payload.content:', payload.content);\nconsole.log('payload.body?.content:', payload.body?.content);\n\n// Extrair informações do webhook Chatwoot\n// ROBUSTEZ: Tenta todas as possibilidades de estrutura\nconst conversationId = payload.body?.conversation?.id || payload.conversation?.id;\nconst contactId = payload.body?.sender?.id || payload.sender?.id;\n\n// CRÍTICO: message_body com extração robusta (ordem importa!)\nconst messageBody = \n  payload.content ||              // Webhook n8n (nivel raiz)\n  payload.body?.content ||        // Chatwoot direto\n  payload.body?.body?.content ||  // Chatwoot encapsulado\n  '';\n\nconsole.log('✅ message_body extraído:', messageBody);\n\n// VALIDAÇÃO: Abortar se message_body vazio\nif (!messageBody || messageBody.trim() === '') {\n  console.error('❌ ERRO CRÍTICO: message_body está vazio ou undefined!');\n  console.error('Payload keys:', Object.keys(payload));\n  console.error('Payload.body keys:', payload.body ? Object.keys(payload.body) : 'body is undefined');\n  throw new Error('message_body não pode estar vazio. Verifique estrutura do payload.');\n}\n\nconst messageType = payload.message_type || payload.body?.message_type || 'incoming';\nconst contentType = payload.content_type || payload.body?.content_type || 'text';\n\n// Extrair custom attributes (onde guardamos client_id e agent_id)\nconst customAttributes = payload.conversation?.custom_attributes || payload.body?.conversation?.custom_attributes || {};\nconst clientId = customAttributes.client_id || 'clinica_sorriso_001';\nconst agentId = customAttributes.agent_id || 'default';\n\n// Canal (whatsapp, email, instagram, etc)\nconst channel = payload.inbox?.channel_type || payload.body?.inbox?.channel_type || 'whatsapp';\n\n// Attachments (mídia que USUÁRIO enviou)\nconst attachments = payload.attachments || payload.body?.attachments || [];\n\nreturn {\n  json: {\n    client_id: clientId,\n    agent_id: agentId,\n    conversation_id: conversationId,\n    contact_id: contactId,\n    channel: channel,\n    message_body: messageBody,\n    message_type: messageType,\n    content_type: contentType,\n    attachments: attachments,\n    has_attachments: attachments.length > 0,\n    timestamp: new Date().toISOString(),\n    original_payload: payload\n  }\n};"
+      },
+      "name": "Identificar Cliente e Agente",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1888,
+        336
+      ],
+      "id": "5e184a95-043c-4e4f-9ba7-1e1e1560ea4d"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.message_type}}",
+              "value2": "incoming"
+            }
+          ]
+        }
+      },
+      "name": "Filtrar Apenas Incoming",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        -1600,
+        336
+      ],
+      "id": "cc5e96d4-0499-4720-874a-d90fef7c65ea"
+    },
+    {
+      "parameters": {
+        "url": "https://vnlfgnfaortdvmraoapq.supabase.co/rest/v1/agents",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "client_id",
+              "value": "=eq.{{$json.client_id}}"
+            },
+            {
+              "name": "agent_id",
+              "value": "=eq.{{$json.agent_id}}"
+            },
+            {
+              "name": "is_active",
+              "value": "=eq.true"
+            },
+            {
+              "name": "select",
+              "value": "*,client_subscriptions(*)"
+            },
+            {
+              "name": "limit",
+              "value": "1"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZubGZnbmZhb3J0ZHZtcmFvYXBxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjE3MTM1NDgsImV4cCI6MjA3NzI4OTU0OH0.Qu6ithTk2tNNG-SYQDN5BP15pb_xKufOQUhqAuwxT0U"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZubGZnbmZhb3J0ZHZtcmFvYXBxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjE3MTM1NDgsImV4cCI6MjA3NzI4OTU0OH0.Qu6ithTk2tNNG-SYQDN5BP15pb_xKufOQUhqAuwxT0U"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Buscar Dados do Agente (HTTP)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -1216,
+        240
+      ],
+      "id": "92f4a935-f4ef-4443-96b0-67f6104630e4",
+      "credentials": {
+        "httpCustomAuth": {
+          "id": "NEn6NpNWjE7hCyWQ",
+          "name": "Supabase API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://vnlfgnfaortdvmraoapq.supabase.co/rest/v1/rpc/search_client_media_rules",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZubGZnbmZhb3J0ZHZtcmFvYXBxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjE3MTM1NDgsImV4cCI6MjA3NzI4OTU0OH0.Qu6ithTk2tNNG-SYQDN5BP15pb_xKufOQUhqAuwxT0U"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZubGZnbmZhb3J0ZHZtcmFvYXBxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjE3MTM1NDgsImV4cCI6MjA3NzI4OTU0OH0.Qu6ithTk2tNNG-SYQDN5BP15pb_xKufOQUhqAuwxT0U"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"p_client_id\": \"{{$json.client_id}}\",\n  \"p_agent_id\": \"{{$json.agent_id}}\",\n  \"p_message_body\": \"{{$json.message_body}}\",\n  \"p_conversation_id\": \"{{$json.conversation_id}}\"\n}",
+        "options": {}
+      },
+      "name": "Verificar Regras de Mídia do Acervo (HTTP)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -1216,
+        432
+      ],
+      "id": "a47c6abd-6aeb-4c89-bc93-66565cd80a14",
+      "credentials": {
+        "httpCustomAuth": {
+          "id": "NEn6NpNWjE7hCyWQ",
+          "name": "Supabase API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "mergeByFields": {
+          "values": []
+        },
+        "joinMode": "keepEverything",
+        "outputDataFrom": "input1",
+        "options": {}
+      },
+      "name": "Merge Dados (Agente + Mídia)",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [
+        -896,
+        336
+      ],
+      "id": "merge-agente-midia"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Construir contexto completo: dados do agente + mídia do acervo + mensagem original\n// CRÍTICO: O Merge combina múltiplos inputs, mas precisamos buscar dados do node correto\n\nconst item = $input.item.json;\n\n// Buscar dados originais do webhook do node 'Filtrar Apenas Incoming'\n// O Merge preserva os dados, mas precisamos garantir que message_body não seja sobrescrito\nconst webhookNode = $('Filtrar Apenas Incoming').first().json;\n\nconst webhookData = {\n  client_id: webhookNode.client_id || item.client_id,\n  agent_id: webhookNode.agent_id || item.agent_id,\n  conversation_id: webhookNode.conversation_id || item.conversation_id,\n  contact_id: webhookNode.contact_id || item.contact_id,\n  channel: webhookNode.channel || item.channel,\n  message_body: webhookNode.message_body || item.message_body,  // ✅ BUSCA DO NODE CORRETO\n  message_type: webhookNode.message_type || item.message_type,\n  content_type: webhookNode.content_type || item.content_type,\n  attachments: webhookNode.attachments || item.attachments || [],\n  has_attachments: webhookNode.has_attachments || item.has_attachments || false,\n  timestamp: webhookNode.timestamp || item.timestamp\n};\n\n// VALIDAÇÃO: Abortar se message_body vazio\nif (!webhookData.message_body || webhookData.message_body.trim() === '') {\n  console.error('❌ ERRO: message_body está vazio em Construir Contexto Completo!');\n  console.error('webhookNode.message_body:', webhookNode.message_body);\n  console.error('item.message_body:', item.message_body);\n  throw new Error('message_body perdido no fluxo!');\n}\n\nconsole.log('✅ message_body preservado:', webhookData.message_body);\n\nconst agentData = item; // Dados do agente já estão no item merged\n\n// Verificar se há dados de mídia no item (do RPC)\nlet mediaRules = [];\nif (item.rule_id && item.media_id) {\n  // RPC retornou mídia - transformar em array\n  mediaRules = [{\n    rule_id: item.rule_id,\n    media_id: item.media_id,\n    trigger_type: item.trigger_type,\n    trigger_value: item.trigger_value,\n    file_url: item.file_url,\n    file_type: item.file_type,\n    file_name: item.file_name,\n    mime_type: item.mime_type,\n    title: item.title,\n    description: item.description\n  }];\n}\n\n// Preparar informação sobre mídia do acervo para o LLM\nlet mediaContext = '';\nlet clientMediaAttachments = [];\nlet mediaLogEntries = [];\n\nif (Array.isArray(mediaRules) && mediaRules.length > 0) {\n  mediaContext = '\\n\\n--- MÍDIA DISPONÍVEL PARA ENVIO ---\\n';\n  \n  mediaRules.forEach((media, i) => {\n    mediaContext += `${i+1}. ${media.title || media.file_name} (${media.file_type})\\n`;\n    mediaContext += `   Descrição: ${media.description || 'N/A'}\\n`;\n    mediaContext += `   Disparado por: ${media.trigger_type} - \"${media.trigger_value}\"\\n\\n`;\n    \n    // Preparar attachments para Chatwoot\n    clientMediaAttachments.push({\n      file_url: media.file_url,\n      file_type: media.file_type,\n      file_name: media.file_name,\n      caption: media.title || media.description || ''\n    });\n    \n    // Preparar logs para tracking\n    mediaLogEntries.push({\n      rule_id: media.rule_id,\n      media_id: media.media_id,\n      triggered_by: media.trigger_type,\n      trigger_value: media.trigger_value\n    });\n  });\n  \n  mediaContext += '\\n🚨 INSTRUÇÃO OBRIGATÓRIA: Você DEVE informar ao usuário que está enviando o arquivo anexo mencionado acima! Não ignore esta instrução!';\n}\n\nreturn {\n  json: {\n    // Preservar TODOS os dados originais do webhook (incluindo message_body)\n    client_id: webhookData.client_id,\n    agent_id: webhookData.agent_id,\n    conversation_id: webhookData.conversation_id,\n    contact_id: webhookData.contact_id,\n    channel: webhookData.channel,\n    message_body: webhookData.message_body,  // ✅ IMPORTANTE!\n    message_type: webhookData.message_type,\n    content_type: webhookData.content_type,\n    attachments: webhookData.attachments,\n    has_attachments: webhookData.has_attachments,\n    timestamp: webhookData.timestamp,\n    \n    // Dados do agente\n    system_prompt: agentData.system_prompt || 'Você é um assistente útil.',\n    llm_model: agentData.llm_model || 'gpt-4o-mini',\n    tools_enabled: agentData.tools_enabled || [],\n    rag_namespace: agentData.rag_namespace,\n    \n    // Contexto de mídia do acervo\n    media_context: mediaContext,\n    client_media_attachments: clientMediaAttachments,\n    media_log_entries: mediaLogEntries,\n    has_client_media: clientMediaAttachments.length > 0,\n    \n    // Subscription data (para usage tracking)\n    subscription: agentData.client_subscriptions?.[0] || {}\n  }\n};"
+      },
+      "name": "Construir Contexto Completo",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -608,
+        336
+      ],
+      "id": "c4d7c0be-ae45-451c-a283-9f8d3add936c"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Query no RAG usando namespace isolado (PLACEHOLDER - Integrar com Pinecone/Qdrant)\nconst ragNamespace = $input.item.json.rag_namespace;\nconst messageBody = $input.item.json.message_body;\n\n// TODO: Implementar query real no vector DB\nconst ragResults = [];\n\nreturn {\n  json: {\n    ...($input.item.json),\n    rag_results: ragResults,\n    rag_context: ragResults.map(r => r.text).join('\\n\\n')\n  }\n};"
+      },
+      "name": "Query RAG (Namespace Isolado)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -320,
+        336
+      ],
+      "id": "0479d841-589c-4633-998e-410f3ae6e8e4"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Preparar prompt completo para o LLM\nlet systemPrompt = $input.item.json.system_prompt;\nconst messageBody = $input.item.json.message_body;\nconst ragContext = $input.item.json.rag_context || '';\nconst mediaContext = $input.item.json.media_context || '';\n\n// CRÍTICO: Se há mídia disponível, injetar instrução no SYSTEM PROMPT\nif (mediaContext && mediaContext.includes('MÍDIA DISPONÍVEL')) {\n  systemPrompt += '\\n\\n--- INSTRUÇÃO CRÍTICA SOBRE MÍDIA ---\\n';\n  systemPrompt += 'Se houver arquivos de mídia disponíveis mencionados no contexto do usuário, você DEVE informar que está enviando esses arquivos como anexo. Não ignore esta instrução!';\n}\n\nconst fullPrompt = systemPrompt + \n  (ragContext ? '\\n\\n--- CONTEXTO DO RAG ---\\n' + ragContext : '') +\n  mediaContext +\n  '\\n\\n--- MENSAGEM DO USUÁRIO ---\\n' + messageBody;\n\nreturn {\n  json: {\n    ...($input.item.json),\n    system_prompt: systemPrompt,  // Atualizado com instrução de mídia\n    llm_prompt: fullPrompt\n  }\n};"
+      },
+      "name": "Preparar Prompt LLM",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -48,
+        336
+      ],
+      "id": "2c7c96c2-e786-4c4f-9044-fcbde7006cc8"
+    },
+    {
+      "parameters": {
+        "resource": "chat",
+        "operation": "complete",
+        "model": "={{ $json.llm_model || 'gpt-4o-mini' }}",
+        "prompt": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "={{ $json.system_prompt }}"
+            },
+            {
+              "role": "user",
+              "content": "={{ $json.media_context + '\\n\\n--- MENSAGEM DO USUÁRIO ---\\n' + $json.message_body }}"
+            }
+          ]
+        },
+        "options": {
+          "temperature": 0.7,
+          "maxTokens": 1000
+        }
+      },
+      "name": "LLM (GPT-4o-mini + Tools)",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [
+        240,
+        336
+      ],
+      "id": "04a3e533-7ee2-443c-8ff6-6b49ee693be9",
+      "credentials": {
+        "openAiApi": {
+          "id": "AZOIk8m4dEU8S2FP",
+          "name": "OpenAi account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Preservar todos os dados do contexto + adicionar resposta do LLM\nconst llmResponse = $input.item.json;\nconst previousData = $('Preparar Prompt LLM').first().json;\n\nreturn {\n  json: {\n    // Preservar TODOS os dados anteriores\n    client_id: previousData.client_id,\n    agent_id: previousData.agent_id,\n    conversation_id: previousData.conversation_id,\n    contact_id: previousData.contact_id,\n    channel: previousData.channel,\n    message_body: previousData.message_body,\n    message_type: previousData.message_type,\n    content_type: previousData.content_type,\n    attachments: previousData.attachments,\n    has_attachments: previousData.has_attachments,\n    timestamp: previousData.timestamp,\n    system_prompt: previousData.system_prompt,\n    llm_model: previousData.llm_model,\n    tools_enabled: previousData.tools_enabled,\n    rag_namespace: previousData.rag_namespace,\n    media_context: previousData.media_context,\n    client_media_attachments: previousData.client_media_attachments,\n    media_log_entries: previousData.media_log_entries,\n    has_client_media: previousData.has_client_media,\n    subscription: previousData.subscription,\n    rag_results: previousData.rag_results,\n    rag_context: previousData.rag_context,\n    llm_prompt: previousData.llm_prompt,\n    \n    // Adicionar resposta do LLM\n    choices: llmResponse.choices\n  }\n};"
+      },
+      "name": "Preservar Contexto Após LLM",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        528,
+        336
+      ],
+      "id": "preservar-contexto-llm"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.choices?.[0]?.finish_reason}}",
+              "value2": "tool_calls"
+            }
+          ]
+        }
+      },
+      "name": "Chamou Tool?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        816,
+        336
+      ],
+      "id": "1357ec03-9f4b-4683-bac2-efb1a979e0a5"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Executar tool calls (Calendar, Sheets, CRM)\nconst toolCalls = $input.item.json.choices?.[0]?.message?.tool_calls || [];\nconst results = [];\n\nfor (const call of toolCalls) {\n  const functionName = call.function.name;\n  const args = JSON.parse(call.function.arguments);\n  \n  // TODO: Implementar chamadas reais às APIs\n  if (functionName === 'create_calendar_event') {\n    results.push({\n      tool: 'calendar',\n      result: `Evento \"${args.title}\" criado para ${args.date}`\n    });\n  } else if (functionName === 'update_sheet') {\n    results.push({\n      tool: 'sheets',\n      result: `Planilha ${args.sheet_id} atualizada`\n    });\n  }\n}\n\nreturn {\n  json: {\n    ...($input.item.json),\n    tool_results: results\n  }\n};"
+      },
+      "name": "Executar Tools",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1088,
+        240
+      ],
+      "id": "6e07ab8b-7246-40a6-be3a-f9a6bb480cdc"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extrair resposta final do LLM e preservar TODOS os dados do contexto\nconst item = $input.item.json;\n\n// Buscar resposta do LLM do node 'Preservar Contexto Após LLM'\nconst llmNode = $('Preservar Contexto Após LLM').first().json;\nconst llmResponse = llmNode.choices?.[0]?.message?.content || item.choices?.[0]?.message?.content || 'Desculpe, não consegui processar sua mensagem.';\nconst toolResults = item.tool_results || [];\n\nlet finalResponse = llmResponse;\n\nif (toolResults.length > 0) {\n  finalResponse += '\\n\\n' + toolResults.map(r => r.result).join('\\n');\n}\n\nconsole.log('✅ Resposta final montada:', finalResponse);\n\nreturn {\n  json: {\n    // Preservar TODOS os campos do contexto (buscar do node LLM)\n    client_id: llmNode.client_id || item.client_id,\n    agent_id: llmNode.agent_id || item.agent_id,\n    conversation_id: llmNode.conversation_id || item.conversation_id,\n    contact_id: llmNode.contact_id || item.contact_id,\n    channel: llmNode.channel || item.channel,\n    message_body: llmNode.message_body || item.message_body,\n    message_type: llmNode.message_type || item.message_type,\n    content_type: llmNode.content_type || item.content_type,\n    attachments: llmNode.attachments || item.attachments || [],\n    has_attachments: llmNode.has_attachments || item.has_attachments || false,\n    timestamp: llmNode.timestamp || item.timestamp,\n    system_prompt: llmNode.system_prompt || item.system_prompt,\n    llm_model: llmNode.llm_model || item.llm_model,\n    tools_enabled: llmNode.tools_enabled || item.tools_enabled || [],\n    rag_namespace: llmNode.rag_namespace || item.rag_namespace,\n    media_context: llmNode.media_context || item.media_context,\n    client_media_attachments: llmNode.client_media_attachments || item.client_media_attachments || [],\n    media_log_entries: llmNode.media_log_entries || item.media_log_entries || [],\n    has_client_media: llmNode.has_client_media || item.has_client_media || false,\n    subscription: llmNode.subscription || item.subscription || {},\n    \n    // Adicionar resposta processada\n    final_response: finalResponse,\n    response_type: 'text',\n    tool_results: toolResults\n  }\n};"
+      },
+      "name": "Construir Resposta Final",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1360,
+        336
+      ],
+      "id": "ed053931-bd85-410f-af46-ff17df098569"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.has_client_media }}",
+              "value2": "true"
+            }
+          ]
+        }
+      },
+      "name": "Tem Mídia do Acervo?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        1648,
+        336
+      ],
+      "id": "tem-midia-acervo"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://vnlfgnfaortdvmraoapq.supabase.co/rest/v1/media_send_log",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZubGZnbmZhb3J0ZHZtcmFvYXBxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjE3MTM1NDgsImV4cCI6MjA3NzI4OTU0OH0.Qu6ithTk2tNNG-SYQDN5BP15pb_xKufOQUhqAuwxT0U"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZubGZnbmZhb3J0ZHZtcmFvYXBxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjE3MTM1NDgsImV4cCI6MjA3NzI4OTU0OH0.Qu6ithTk2tNNG-SYQDN5BP15pb_xKufOQUhqAuwxT0U"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=representation"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json.media_log_entries }}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "autodetect",
+              "fullResponse": false,
+              "neverError": false
+            }
+          },
+          "pagination": {
+            "pagination": {}
+          },
+          "batching": {
+            "batch": {}
+          }
+        }
+      },
+      "name": "Registrar Log de Envio (HTTP)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1936,
+        240
+      ],
+      "id": "be620e67-0ac9-4a8b-a4b7-924a24868135",
+      "credentials": {
+        "httpCustomAuth": {
+          "id": "NEn6NpNWjE7hCyWQ",
+          "name": "Supabase API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Preservar dados originais após HTTP Request (que substitui o output)\nconst originalData = $('Construir Resposta Final').first().json;\nconst logResponse = $input.item.json;\n\nconsole.log('✅ Log registrado no Supabase:', logResponse);\n\nreturn {\n  json: {\n    ...originalData,  // Preservar TODOS os dados originais\n    media_log_response: logResponse  // Adicionar resposta do log\n  }\n};"
+      },
+      "name": "Preservar Dados Após Log",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2224,
+        240
+      ],
+      "id": "preservar-dados-log"
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "https://vnlfgnfaortdvmraoapq.supabase.co/rest/v1/client_subscriptions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "client_id",
+              "value": "=eq.{{$json.client_id}}"
+            },
+            {
+              "name": "agent_id",
+              "value": "=eq.{{$json.agent_id}}"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZubGZnbmZhb3J0ZHZtcmFvYXBxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjE3MTM1NDgsImV4cCI6MjA3NzI4OTU0OH0.Qu6ithTk2tNNG-SYQDN5BP15pb_xKufOQUhqAuwxT0U"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZubGZnbmZhb3J0ZHZtcmFvYXBxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjE3MTM1NDgsImV4cCI6MjA3NzI4OTU0OH0.Qu6ithTk2tNNG-SYQDN5BP15pb_xKufOQUhqAuwxT0U"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=representation"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"updated_at\": \"{{$now}}\"\n}",
+        "options": {}
+      },
+      "name": "Atualizar Usage Tracking (HTTP)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2512,
+        336
+      ],
+      "id": "814970ad-227a-44d3-acff-53984ebe2086",
+      "credentials": {
+        "httpCustomAuth": {
+          "id": "NEn6NpNWjE7hCyWQ",
+          "name": "Supabase API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Preservar dados originais após HTTP Request de Usage Tracking\nconst originalData = $('Construir Resposta Final').first().json;\nconst usageResponse = $input.item.json;\n\nconsole.log('✅ Usage tracking atualizado:', usageResponse);\nconsole.log('📦 Dados preservados - client_media_attachments:', originalData.client_media_attachments);\n\nreturn {\n  json: {\n    ...originalData,  // Preservar TODOS os dados (incluindo client_media_attachments!)\n    subscription: usageResponse[0] || usageResponse  // Adicionar resposta do usage tracking\n  }\n};"
+      },
+      "name": "Preservar Dados Após Usage Tracking",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2656,
+        336
+      ],
+      "id": "preservar-dados-usage"
+    },
+    {
+      "parameters": {
+        "jsCode": "// 🔴 NODE TEMPORARIAMENTE DESABILITADO (teste sem Chatwoot real)\n// Simula envio bem-sucedido\nconst response = {\n  success: true,\n  message_sent: true,\n  conversation_id: $input.item.json.conversation_id,\n  final_response: $input.item.json.final_response,\n  attachments_count: ($input.item.json.client_media_attachments || []).length,\n  timestamp: new Date().toISOString()\n};\n\nconsole.log('✅ SIMULAÇÃO: Resposta enviada ao Chatwoot:', response);\n\nreturn { json: { ...$input.item.json, chatwoot_response: response } };"
+      },
+      "name": "Enviar Resposta via Chatwoot",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2800,
+        336
+      ],
+      "id": "24a41b93-1579-469a-9a38-ac575dbcc5a7"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Log de erro detalhado\nconst error = $input.item.json.error || {};\nconst clientId = $input.item.json.client_id;\nconst agentId = $input.item.json.agent_id;\n\nconsole.error('ERRO NO WORKFLOW:', {\n  client_id: clientId,\n  agent_id: agentId,\n  error_message: error.message,\n  error_stack: error.stack,\n  timestamp: new Date().toISOString()\n});\n\nreturn {\n  json: {\n    ...($input.item.json),\n    final_response: 'Desculpe, ocorreu um erro temporário. Nossa equipe já foi notificada. Por favor, tente novamente em alguns instantes.',\n    is_error: true\n  }\n};"
+      },
+      "name": "Error Handler",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2800,
+        544
+      ],
+      "id": "615cda86-0b00-4dd9-8aaa-34da4d47ac14"
+    }
+  ],
+  "connections": {
+    "Chatwoot Webhook": {
+      "main": [
+        [
+          {
+            "node": "Identificar Cliente e Agente",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Identificar Cliente e Agente": {
+      "main": [
+        [
+          {
+            "node": "Filtrar Apenas Incoming",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filtrar Apenas Incoming": {
+      "main": [
+        [
+          {
+            "node": "Buscar Dados do Agente (HTTP)",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Verificar Regras de Mídia do Acervo (HTTP)",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Merge Dados (Agente + Mídia)",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "Buscar Dados do Agente (HTTP)": {
+      "main": [
+        [
+          {
+            "node": "Merge Dados (Agente + Mídia)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Verificar Regras de Mídia do Acervo (HTTP)": {
+      "main": [
+        [
+          {
+            "node": "Merge Dados (Agente + Mídia)",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge Dados (Agente + Mídia)": {
+      "main": [
+        [
+          {
+            "node": "Construir Contexto Completo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Construir Contexto Completo": {
+      "main": [
+        [
+          {
+            "node": "Query RAG (Namespace Isolado)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Query RAG (Namespace Isolado)": {
+      "main": [
+        [
+          {
+            "node": "Preparar Prompt LLM",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparar Prompt LLM": {
+      "main": [
+        [
+          {
+            "node": "LLM (GPT-4o-mini + Tools)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "LLM (GPT-4o-mini + Tools)": {
+      "main": [
+        [
+          {
+            "node": "Preservar Contexto Após LLM",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preservar Contexto Após LLM": {
+      "main": [
+        [
+          {
+            "node": "Chamou Tool?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Chamou Tool?": {
+      "main": [
+        [
+          {
+            "node": "Executar Tools",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Construir Resposta Final",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Executar Tools": {
+      "main": [
+        [
+          {
+            "node": "Construir Resposta Final",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Construir Resposta Final": {
+      "main": [
+        [
+          {
+            "node": "Tem Mídia do Acervo?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tem Mídia do Acervo?": {
+      "main": [
+        [
+          {
+            "node": "Registrar Log de Envio (HTTP)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Atualizar Usage Tracking (HTTP)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Registrar Log de Envio (HTTP)": {
+      "main": [
+        [
+          {
+            "node": "Preservar Dados Após Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preservar Dados Após Log": {
+      "main": [
+        [
+          {
+            "node": "Atualizar Usage Tracking (HTTP)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Atualizar Usage Tracking (HTTP)": {
+      "main": [
+        [
+          {
+            "node": "Preservar Dados Após Usage Tracking",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preservar Dados Após Usage Tracking": {
+      "main": [
+        [
+          {
+            "node": "Enviar Resposta via Chatwoot",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {
+    "Chatwoot Webhook": [
+      {
+        "headers": {
+          "host": "n8n.evolutedigital.com.br",
+          "user-agent": "Mozilla/5.0 (Windows NT 10.0; Microsoft Windows 10.0.26200; pt-BR) PowerShell/7.5.4",
+          "content-length": "570",
+          "accept-encoding": "gzip, deflate, br",
+          "content-type": "application/json",
+          "x-forwarded-for": "179.144.139.75",
+          "x-forwarded-host": "n8n.evolutedigital.com.br",
+          "x-forwarded-port": "443",
+          "x-forwarded-proto": "https",
+          "x-forwarded-server": "4fa76e5acce3",
+          "x-real-ip": "179.144.139.75"
+        },
+        "params": {},
+        "query": {},
+        "body": {
+          "attachments": [],
+          "content_type": "text",
+          "content": "qual o preço?",
+          "created_at": "2025-11-07T18:43:01.350Z",
+          "message_type": "incoming",
+          "inbox": {
+            "name": "WhatsApp Teste",
+            "channel_type": "whatsapp",
+            "id": 1
+          },
+          "conversation": {
+            "custom_attributes": {
+              "agent_id": "default",
+              "client_id": "clinica_sorriso_001"
+            },
+            "status": "open",
+            "id": 99999
+          },
+          "sender": {
+            "phone_number": "+5511999999999",
+            "name": "Cliente Teste",
+            "id": 12345
+          },
+          "event": "message_created"
+        },
+        "webhookUrl": "https://n8n.evolutedigital.com.br/webhook/chatwoot-webhook",
+        "executionMode": "production"
+      }
+    ]
+  },
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "569d30e41eb76a1ea495af04713ddcb7e6304e9943292f9d85d95af4c52eb47b"
+  }
+}
