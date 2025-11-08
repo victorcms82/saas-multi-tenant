@@ -1,0 +1,567 @@
+{
+  "name": "WF0 - Gestor Universal (Complete)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "chatwoot-webhook",
+        "options": {}
+      },
+      "name": "Chatwoot Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [250, 300],
+      "webhookId": "chatwoot-incoming",
+      "id": "webhook-chatwoot"
+    },
+    {
+      "parameters": {
+        "functionCode": "// Identifica cliente, agente e canal\nconst payload = $input.item.json;\n\n// Extrair informações do webhook Chatwoot\nconst conversationId = payload.conversation?.id;\nconst contactId = payload.sender?.id;\nconst messageBody = payload.content || '';\nconst messageType = payload.message_type; // incoming/outgoing\nconst contentType = payload.content_type; // text/image/audio/video/file\n\n// Extrair custom attributes (onde guardamos client_id e agent_id)\nconst customAttributes = payload.conversation?.custom_attributes || {};\nconst clientId = customAttributes.client_id || 'clinica_sorriso_001';\nconst agentId = customAttributes.agent_id || 'default';\n\n// Canal (whatsapp, email, instagram, etc)\nconst channel = payload.inbox?.channel_type || 'whatsapp';\n\n// Attachments (mídia)\nconst attachments = payload.attachments || [];\n\nreturn {\n  json: {\n    // Identificação\n    client_id: clientId,\n    agent_id: agentId,\n    conversation_id: conversationId,\n    contact_id: contactId,\n    \n    // Canal\n    channel: channel,\n    \n    // Mensagem\n    message_body: messageBody,\n    message_type: messageType,\n    content_type: contentType,\n    \n    // Mídia\n    attachments: attachments,\n    has_attachments: attachments.length > 0,\n    \n    // Timestamp\n    timestamp: new Date().toISOString(),\n    \n    // Payload original\n    original_payload: payload\n  }\n};"
+      },
+      "name": "Identificar Cliente e Agente",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [450, 300],
+      "id": "identify-client-agent"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.message_type}}",
+              "operation": "equals",
+              "value2": "outgoing"
+            }
+          ]
+        }
+      },
+      "name": "Filtrar Apenas Incoming",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [650, 300],
+      "id": "filter-incoming"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT \n  a.id,\n  a.client_id,\n  a.agent_id,\n  a.template_id,\n  a.rag_namespace,\n  a.is_active,\n  t.name as template_name,\n  s.monthly_price,\n  s.status as subscription_status,\n  s.total_messages,\n  s.message_limit,\n  s.transcription_minutes_used,\n  s.transcription_minutes_limit\nFROM agents a\nLEFT JOIN agent_templates t ON a.template_id = t.template_id\nLEFT JOIN client_subscriptions s ON a.client_id = s.client_id AND a.agent_id = s.agent_id\nWHERE a.client_id = '{{$json.client_id}}'\n  AND a.agent_id = '{{$json.agent_id}}'\n  AND a.is_active = true\nLIMIT 1;"
+      },
+      "name": "Buscar Dados do Agente",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.1,
+      "position": [850, 200],
+      "credentials": {
+        "postgres": {
+          "id": "supabase-db",
+          "name": "Supabase Database"
+        }
+      },
+      "id": "get-agent-data"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{$json.has_attachments}}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "name": "Tem Mídia?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [1050, 300],
+      "id": "check-media"
+    },
+    {
+      "parameters": {
+        "functionCode": "// Processar cada attachment\nconst attachments = $input.item.json.attachments || [];\nconst processedMedia = [];\n\nfor (const attachment of attachments) {\n  const fileUrl = attachment.data_url;\n  const fileType = attachment.file_type; // image/audio/video/file\n  const fileName = attachment.file_name || 'unknown';\n  \n  processedMedia.push({\n    url: fileUrl,\n    type: fileType,\n    name: fileName,\n    mime_type: attachment.content_type,\n    needs_transcription: fileType === 'audio',\n    needs_vision: fileType === 'image',\n    needs_extraction: fileType === 'file'\n  });\n}\n\nreturn {\n  json: {\n    ...($input.item.json),\n    processed_media: processedMedia,\n    media_count: processedMedia.length\n  }\n};"
+      },
+      "name": "Classificar Tipos de Mídia",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [1250, 200],
+      "id": "classify-media"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "audio_items",
+              "name": "audio_items",
+              "type": "array",
+              "value": "={{$json.processed_media.filter(m => m.needs_transcription)}}"
+            },
+            {
+              "id": "image_items",
+              "name": "image_items",
+              "type": "array",
+              "value": "={{$json.processed_media.filter(m => m.needs_vision)}}"
+            },
+            {
+              "id": "file_items",
+              "name": "file_items",
+              "type": "array",
+              "value": "={{$json.processed_media.filter(m => m.needs_extraction)}}"
+            }
+          ]
+        }
+      },
+      "name": "Separar por Tipo",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3,
+      "position": [1450, 200],
+      "id": "split-media-types"
+    },
+    {
+      "parameters": {
+        "functionCode": "// Simular transcrição de áudio (integrar com Google Speech-to-Text ou Whisper)\nconst audioItems = $input.item.json.audio_items || [];\nconst transcriptions = [];\n\nfor (const audio of audioItems) {\n  // TODO: Chamar API de transcrição real\n  // Por enquanto, placeholder\n  transcriptions.push({\n    url: audio.url,\n    text: `[ÁUDIO TRANSCRITO - Placeholder - Integrar Google Speech-to-Text API]`,\n    duration_seconds: 0, // Calcular da API\n    language: 'pt-BR'\n  });\n}\n\nreturn {\n  json: {\n    ...($input.item.json),\n    transcriptions: transcriptions,\n    total_transcription_seconds: transcriptions.reduce((sum, t) => sum + t.duration_seconds, 0)\n  }\n};"
+      },
+      "name": "Transcrever Áudio",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [1650, 100],
+      "id": "transcribe-audio"
+    },
+    {
+      "parameters": {
+        "functionCode": "// Simular análise de imagem com Vision AI (integrar com GPT-4V ou Google Vision)\nconst imageItems = $input.item.json.image_items || [];\nconst visionResults = [];\n\nfor (const image of imageItems) {\n  // TODO: Chamar API de Vision AI real\n  visionResults.push({\n    url: image.url,\n    description: `[IMAGEM ANALISADA - Placeholder - Integrar GPT-4 Vision ou Google Vision API]`,\n    objects_detected: [],\n    text_in_image: ''\n  });\n}\n\nreturn {\n  json: {\n    ...($input.item.json),\n    vision_results: visionResults,\n    total_images_processed: visionResults.length\n  }\n};"
+      },
+      "name": "Analisar Imagens (Vision AI)",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [1650, 200],
+      "id": "analyze-images"
+    },
+    {
+      "parameters": {
+        "functionCode": "// Extrair texto de documentos PDF/DOCX\nconst fileItems = $input.item.json.file_items || [];\nconst extractedTexts = [];\n\nfor (const file of fileItems) {\n  // TODO: Integrar com biblioteca de extração (pdf-parse, mammoth, etc)\n  extractedTexts.push({\n    url: file.url,\n    name: file.name,\n    extracted_text: `[DOCUMENTO PROCESSADO - Placeholder - Integrar extração de PDF/DOCX]`\n  });\n}\n\nreturn {\n  json: {\n    ...($input.item.json),\n    extracted_documents: extractedTexts\n  }\n};"
+      },
+      "name": "Extrair Texto de Documentos",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [1650, 300],
+      "id": "extract-documents"
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineAll"
+      },
+      "name": "Reunir Mídia Processada",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 2.1,
+      "position": [1850, 200],
+      "id": "merge-media"
+    },
+    {
+      "parameters": {
+        "functionCode": "// Construir contexto completo com texto + mídia processada\nconst messageBody = $input.item.json.message_body || '';\nconst transcriptions = $input.item.json.transcriptions || [];\nconst visionResults = $input.item.json.vision_results || [];\nconst documents = $input.item.json.extracted_documents || [];\n\nlet fullContext = messageBody;\n\n// Adicionar transcrições\nif (transcriptions.length > 0) {\n  fullContext += '\\n\\n--- ÁUDIOS TRANSCRITOS ---\\n';\n  transcriptions.forEach((t, i) => {\n    fullContext += `Áudio ${i+1}: ${t.text}\\n`;\n  });\n}\n\n// Adicionar análise de imagens\nif (visionResults.length > 0) {\n  fullContext += '\\n\\n--- IMAGENS ANALISADAS ---\\n';\n  visionResults.forEach((v, i) => {\n    fullContext += `Imagem ${i+1}: ${v.description}\\n`;\n  });\n}\n\n// Adicionar documentos\nif (documents.length > 0) {\n  fullContext += '\\n\\n--- DOCUMENTOS ---\\n';\n  documents.forEach((d, i) => {\n    fullContext += `${d.name}: ${d.extracted_text}\\n`;\n  });\n}\n\nreturn {\n  json: {\n    ...($input.item.json),\n    full_context: fullContext,\n    context_has_media: transcriptions.length > 0 || visionResults.length > 0 || documents.length > 0\n  }\n};"
+      },
+      "name": "Construir Contexto Completo",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [2050, 200],
+      "id": "build-context"
+    },
+    {
+      "parameters": {
+        "functionCode": "// Armazenar mensagem no buffer Redis (5 segundos de janela)\nconst clientId = $input.item.json.client_id;\nconst agentId = $input.item.json.agent_id;\nconst conversationId = $input.item.json.conversation_id;\nconst fullContext = $input.item.json.full_context;\n\n// TODO: Integrar com Redis real\n// Por enquanto, passar direto\n\nreturn {\n  json: {\n    ...($input.item.json),\n    buffer_key: `${clientId}:${agentId}:${conversationId}`,\n    buffered_at: new Date().toISOString()\n  }\n};"
+      },
+      "name": "Buffer Redis (5s)",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [2250, 200],
+      "id": "redis-buffer"
+    },
+    {
+      "parameters": {
+        "amount": 5,
+        "unit": "seconds"
+      },
+      "name": "Aguardar Agrupamento",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1,
+      "position": [2450, 200],
+      "id": "wait-grouping"
+    },
+    {
+      "parameters": {
+        "functionCode": "// Query no RAG usando namespace isolado\nconst ragNamespace = $input.item.json.rag_namespace;\nconst fullContext = $input.item.json.full_context;\n\n// TODO: Integrar com Pinecone/Qdrant/Weaviate\n// Query: fullContext\n// Namespace: ragNamespace\n\nconst ragResults = [\n  {\n    text: '[RAG RESULT 1 - Placeholder - Integrar com Vector DB]',\n    score: 0.95\n  },\n  {\n    text: '[RAG RESULT 2 - Placeholder]',\n    score: 0.87\n  }\n];\n\nreturn {\n  json: {\n    ...($input.item.json),\n    rag_results: ragResults,\n    rag_context: ragResults.map(r => r.text).join('\\n\\n')\n  }\n};"
+      },
+      "name": "Query RAG (Namespace Isolado)",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [2650, 200],
+      "id": "query-rag"
+    },
+    {
+      "parameters": {
+        "functionCode": "// Preparar prompt para LLM com contexto completo\nconst messageBody = $input.item.json.message_body;\nconst fullContext = $input.item.json.full_context;\nconst ragContext = $input.item.json.rag_context || '';\nconst agentData = $input.item.json; // Dados do agente do DB\n\nconst systemPrompt = `Você é um assistente de IA configurado para ajudar ${agentData.client_id}.\n\nContexto do RAG:\n${ragContext}\n\nVocê tem acesso às seguintes ferramentas:\n- create_calendar_event: Criar eventos no Google Calendar\n- update_sheet: Atualizar planilhas Google Sheets\n- search_crm: Buscar informações no CRM\n\nResponda de forma útil e profissional.`;\n\nconst userMessage = fullContext;\n\nreturn {\n  json: {\n    ...($input.item.json),\n    system_prompt: systemPrompt,\n    user_message: userMessage\n  }\n};"
+      },
+      "name": "Preparar Prompt LLM",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [2850, 200],
+      "id": "prepare-llm-prompt"
+    },
+    {
+      "parameters": {
+        "model": "gpt-4o-mini",
+        "messages": {
+          "values": [
+            {
+              "role": "system",
+              "content": "={{$json.system_prompt}}"
+            },
+            {
+              "role": "user",
+              "content": "={{$json.user_message}}"
+            }
+          ]
+        },
+        "options": {
+          "temperature": 0.7,
+          "maxTokens": 1000,
+          "tools": [
+            {
+              "type": "function",
+              "function": {
+                "name": "create_calendar_event",
+                "description": "Criar evento no Google Calendar",
+                "parameters": {
+                  "type": "object",
+                  "properties": {
+                    "title": {"type": "string"},
+                    "date": {"type": "string"},
+                    "time": {"type": "string"}
+                  },
+                  "required": ["title", "date"]
+                }
+              }
+            },
+            {
+              "type": "function",
+              "function": {
+                "name": "update_sheet",
+                "description": "Atualizar Google Sheets",
+                "parameters": {
+                  "type": "object",
+                  "properties": {
+                    "sheet_id": {"type": "string"},
+                    "range": {"type": "string"},
+                    "values": {"type": "array"}
+                  },
+                  "required": ["sheet_id", "range", "values"]
+                }
+              }
+            }
+          ]
+        }
+      },
+      "name": "LLM (GPT-4o-mini + Tools)",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1.1,
+      "position": [3050, 200],
+      "credentials": {
+        "openAiApi": {
+          "id": "openai-creds",
+          "name": "OpenAI API"
+        }
+      },
+      "id": "llm-gpt4o"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.choices[0].finish_reason}}",
+              "operation": "equals",
+              "value2": "tool_calls"
+            }
+          ]
+        }
+      },
+      "name": "Chamou Tool?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [3250, 200],
+      "id": "check-tool-call"
+    },
+    {
+      "parameters": {
+        "functionCode": "// Executar tool calls (Calendar, Sheets, CRM)\nconst toolCalls = $input.item.json.choices[0].message.tool_calls || [];\nconst results = [];\n\nfor (const call of toolCalls) {\n  const functionName = call.function.name;\n  const args = JSON.parse(call.function.arguments);\n  \n  // TODO: Executar tools reais\n  if (functionName === 'create_calendar_event') {\n    results.push({\n      tool: 'calendar',\n      result: `Evento \"${args.title}\" criado para ${args.date}`\n    });\n  } else if (functionName === 'update_sheet') {\n    results.push({\n      tool: 'sheets',\n      result: `Planilha ${args.sheet_id} atualizada`\n    });\n  }\n}\n\nreturn {\n  json: {\n    ...($input.item.json),\n    tool_results: results\n  }\n};"
+      },
+      "name": "Executar Tools",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [3450, 100],
+      "id": "execute-tools"
+    },
+    {
+      "parameters": {
+        "functionCode": "// Extrair resposta final do LLM\nconst llmResponse = $input.item.json.choices?.[0]?.message?.content || 'Desculpe, não consegui processar sua mensagem.';\nconst toolResults = $input.item.json.tool_results || [];\n\nlet finalResponse = llmResponse;\n\n// Se executou tools, adicionar confirmação\nif (toolResults.length > 0) {\n  finalResponse += '\\n\\n' + toolResults.map(r => r.result).join('\\n');\n}\n\n// Detectar solicitações de mídia na resposta\nconst needsImage = /\\[GERAR_IMAGEM:(.+?)\\]/.test(finalResponse);\nconst needsDocument = /\\[GERAR_DOCUMENTO:(.+?)\\]/.test(finalResponse);\nconst needsAudio = /\\[GERAR_AUDIO:(.+?)\\]/.test(finalResponse);\n\nreturn {\n  json: {\n    ...($input.item.json),\n    final_response: finalResponse,\n    response_type: 'text',\n    needs_image_generation: needsImage,\n    needs_document_generation: needsDocument,\n    needs_audio_generation: needsAudio,\n    has_media_to_generate: needsImage || needsDocument || needsAudio\n  }\n};"
+      },
+      "name": "Construir Resposta Final",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [3650, 200],
+      "id": "build-response"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{$json.has_media_to_generate}}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "name": "Precisa Gerar Mídia?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [3850, 200],
+      "id": "check-media-generation"
+    },
+    {
+      "parameters": {
+        "functionCode": "// Gerar imagem com DALL-E 3\nconst finalResponse = $input.item.json.final_response;\nconst match = finalResponse.match(/\\[GERAR_IMAGEM:(.+?)\\]/);\n\nif (!match) {\n  return { json: { ...$input.item.json, generated_images: [] } };\n}\n\nconst imagePrompt = match[1];\n\n// TODO: Integrar com DALL-E 3 ou Stable Diffusion\n// Por enquanto, placeholder\nconst generatedImages = [\n  {\n    prompt: imagePrompt,\n    url: 'https://placeholder.com/generated-image.jpg',\n    service: 'dall-e-3',\n    cost_usd: 0.04 // DALL-E 3 standard quality\n  }\n];\n\n// Remover tag da resposta\nconst cleanResponse = finalResponse.replace(/\\[GERAR_IMAGEM:.+?\\]/g, '');\n\nreturn {\n  json: {\n    ...($input.item.json),\n    final_response: cleanResponse,\n    generated_images: generatedImages,\n    images_to_send: generatedImages.map(img => img.url)\n  }\n};"
+      },
+      "name": "Gerar Imagem (DALL-E 3)",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [4050, 100],
+      "id": "generate-image"
+    },
+    {
+      "parameters": {
+        "functionCode": "// Gerar documento PDF/DOCX\nconst finalResponse = $input.item.json.final_response;\nconst match = finalResponse.match(/\\[GERAR_DOCUMENTO:(.+?)\\]/);\n\nif (!match) {\n  return { json: { ...$input.item.json, generated_documents: [] } };\n}\n\nconst docType = match[1]; // 'relatorio', 'proposta', 'contrato'\n\n// TODO: Integrar com biblioteca de geração de PDF (puppeteer, pdfkit)\nconst generatedDocuments = [\n  {\n    type: docType,\n    url: 'https://storage.supabase.co/generated-doc.pdf',\n    filename: `${docType}-${Date.now()}.pdf`,\n    service: 'puppeteer'\n  }\n];\n\n// Remover tag da resposta\nconst cleanResponse = finalResponse.replace(/\\[GERAR_DOCUMENTO:.+?\\]/g, '');\n\nreturn {\n  json: {\n    ...($input.item.json),\n    final_response: cleanResponse,\n    generated_documents: generatedDocuments,\n    documents_to_send: generatedDocuments.map(doc => ({\n      url: doc.url,\n      filename: doc.filename\n    }))\n  }\n};"
+      },
+      "name": "Gerar Documento (PDF)",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [4050, 200],
+      "id": "generate-document"
+    },
+    {
+      "parameters": {
+        "functionCode": "// Gerar áudio com TTS (Text-to-Speech)\nconst finalResponse = $input.item.json.final_response;\nconst match = finalResponse.match(/\\[GERAR_AUDIO:(.+?)\\]/);\n\nif (!match) {\n  return { json: { ...$input.item.json, generated_audios: [] } };\n}\n\nconst audioText = match[1];\n\n// TODO: Integrar com OpenAI TTS, Google TTS ou ElevenLabs\nconst generatedAudios = [\n  {\n    text: audioText,\n    url: 'https://storage.supabase.co/generated-audio.mp3',\n    service: 'openai-tts',\n    voice: 'nova', // OpenAI TTS voices: alloy, echo, fable, onyx, nova, shimmer\n    duration_seconds: Math.ceil(audioText.length / 15), // ~15 chars/sec\n    cost_usd: Math.ceil(audioText.length / 1000) * 0.015 // $15/1M chars\n  }\n];\n\n// Remover tag da resposta\nconst cleanResponse = finalResponse.replace(/\\[GERAR_AUDIO:.+?\\]/g, '');\n\nreturn {\n  json: {\n    ...($input.item.json),\n    final_response: cleanResponse,\n    generated_audios: generatedAudios,\n    audios_to_send: generatedAudios.map(audio => audio.url)\n  }\n};"
+      },
+      "name": "Gerar Áudio (TTS)",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [4050, 300],
+      "id": "generate-audio"
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineAll"
+      },
+      "name": "Reunir Mídia Gerada",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 2.1,
+      "position": [4250, 200],
+      "id": "merge-generated-media"
+    },
+    {
+      "parameters": {
+        "functionCode": "// Preparar payload completo com texto + mídias\nconst finalResponse = $input.item.json.final_response || '';\nconst imagesToSend = $input.item.json.images_to_send || [];\nconst documentsToSend = $input.item.json.documents_to_send || [];\nconst audiosToSend = $input.item.json.audios_to_send || [];\n\nconst attachments = [];\n\n// Adicionar imagens\nimagesToSend.forEach(url => {\n  attachments.push({\n    type: 'image',\n    url: url\n  });\n});\n\n// Adicionar documentos\ndocumentsToSend.forEach(doc => {\n  attachments.push({\n    type: 'file',\n    url: doc.url,\n    filename: doc.filename\n  });\n});\n\n// Adicionar áudios\naudiosToSend.forEach(url => {\n  attachments.push({\n    type: 'audio',\n    url: url\n  });\n});\n\nreturn {\n  json: {\n    ...($input.item.json),\n    message_content: finalResponse,\n    attachments: attachments,\n    has_attachments: attachments.length > 0,\n    attachment_count: attachments.length\n  }\n};"
+      },
+      "name": "Preparar Payload com Mídia",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [4450, 200],
+      "id": "prepare-payload-with-media"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE client_subscriptions\nSET \n  total_messages = total_messages + 1,\n  transcription_minutes_used = transcription_minutes_used + ({{$json.total_transcription_seconds || 0}} / 60.0),\n  images_processed = images_processed + {{$json.total_images_processed || 0}},\n  images_generated = images_generated + {{$json.generated_images?.length || 0}},\n  last_message_at = NOW(),\n  updated_at = NOW()\nWHERE client_id = '{{$json.client_id}}'\n  AND agent_id = '{{$json.agent_id}}'\nRETURNING *;"
+      },
+      "name": "Atualizar Usage Tracking",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.1,
+      "position": [4650, 200],
+      "credentials": {
+        "postgres": {
+          "id": "supabase-db",
+          "name": "Supabase Database"
+        }
+      },
+      "id": "update-usage"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://app.chatwoot.com/api/v1/accounts/{{$env.CHATWOOT_ACCOUNT_ID}}/conversations/{{$json.conversation_id}}/messages",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "chatwootApi",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "content",
+              "value": "={{$json.message_content}}"
+            },
+            {
+              "name": "message_type",
+              "value": "outgoing"
+            },
+            {
+              "name": "private",
+              "value": false
+            },
+            {
+              "name": "attachments",
+              "value": "={{$json.attachments}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Enviar Resposta + Mídia via Chatwoot",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [4850, 200],
+      "credentials": {
+        "chatwootApi": {
+          "id": "chatwoot-creds",
+          "name": "Chatwoot API"
+        }
+      },
+      "id": "send-chatwoot"
+    },
+    {
+      "parameters": {
+        "functionCode": "// Log de erro detalhado\nconst error = $input.item.json.error || {};\nconst clientId = $input.item.json.client_id;\nconst agentId = $input.item.json.agent_id;\n\nconsole.error('ERRO NO WORKFLOW:', {\n  client_id: clientId,\n  agent_id: agentId,\n  error_message: error.message,\n  error_stack: error.stack,\n  timestamp: new Date().toISOString()\n});\n\n// Enviar mensagem de erro genérica ao usuário\nreturn {\n  json: {\n    ...($input.item.json),\n    final_response: 'Desculpe, ocorreu um erro temporário. Nossa equipe já foi notificada. Por favor, tente novamente em alguns instantes.',\n    is_error: true\n  }\n};"
+      },
+      "name": "Error Handler",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [3250, 400],
+      "id": "error-handler"
+    }
+  ],
+  "connections": {
+    "Chatwoot Webhook": {
+      "main": [[{"node": "Identificar Cliente e Agente", "type": "main", "index": 0}]]
+    },
+    "Identificar Cliente e Agente": {
+      "main": [[{"node": "Filtrar Apenas Incoming", "type": "main", "index": 0}]]
+    },
+    "Filtrar Apenas Incoming": {
+      "main": [
+        [{"node": "Buscar Dados do Agente", "type": "main", "index": 0}],
+        []
+      ]
+    },
+    "Buscar Dados do Agente": {
+      "main": [[{"node": "Tem Mídia?", "type": "main", "index": 0}]]
+    },
+    "Tem Mídia?": {
+      "main": [
+        [{"node": "Classificar Tipos de Mídia", "type": "main", "index": 0}],
+        [{"node": "Construir Contexto Completo", "type": "main", "index": 0}]
+      ]
+    },
+    "Classificar Tipos de Mídia": {
+      "main": [[{"node": "Separar por Tipo", "type": "main", "index": 0}]]
+    },
+    "Separar por Tipo": {
+      "main": [[
+        {"node": "Transcrever Áudio", "type": "main", "index": 0},
+        {"node": "Analisar Imagens (Vision AI)", "type": "main", "index": 0},
+        {"node": "Extrair Texto de Documentos", "type": "main", "index": 0}
+      ]]
+    },
+    "Transcrever Áudio": {
+      "main": [[{"node": "Reunir Mídia Processada", "type": "main", "index": 0}]]
+    },
+    "Analisar Imagens (Vision AI)": {
+      "main": [[{"node": "Reunir Mídia Processada", "type": "main", "index": 1}]]
+    },
+    "Extrair Texto de Documentos": {
+      "main": [[{"node": "Reunir Mídia Processada", "type": "main", "index": 2}]]
+    },
+    "Reunir Mídia Processada": {
+      "main": [[{"node": "Construir Contexto Completo", "type": "main", "index": 0}]]
+    },
+    "Construir Contexto Completo": {
+      "main": [[{"node": "Buffer Redis (5s)", "type": "main", "index": 0}]]
+    },
+    "Buffer Redis (5s)": {
+      "main": [[{"node": "Aguardar Agrupamento", "type": "main", "index": 0}]]
+    },
+    "Aguardar Agrupamento": {
+      "main": [[{"node": "Query RAG (Namespace Isolado)", "type": "main", "index": 0}]]
+    },
+    "Query RAG (Namespace Isolado)": {
+      "main": [[{"node": "Preparar Prompt LLM", "type": "main", "index": 0}]]
+    },
+    "Preparar Prompt LLM": {
+      "main": [[{"node": "LLM (GPT-4o-mini + Tools)", "type": "main", "index": 0}]]
+    },
+    "LLM (GPT-4o-mini + Tools)": {
+      "main": [[{"node": "Chamou Tool?", "type": "main", "index": 0}]]
+    },
+    "Chamou Tool?": {
+      "main": [
+        [{"node": "Executar Tools", "type": "main", "index": 0}],
+        [{"node": "Construir Resposta Final", "type": "main", "index": 0}]
+      ]
+    },
+    "Executar Tools": {
+      "main": [[{"node": "Construir Resposta Final", "type": "main", "index": 0}]]
+    },
+    "Construir Resposta Final": {
+      "main": [[{"node": "Precisa Gerar Mídia?", "type": "main", "index": 0}]]
+    },
+    "Precisa Gerar Mídia?": {
+      "main": [
+        [
+          {"node": "Gerar Imagem (DALL-E 3)", "type": "main", "index": 0},
+          {"node": "Gerar Documento (PDF)", "type": "main", "index": 0},
+          {"node": "Gerar Áudio (TTS)", "type": "main", "index": 0}
+        ],
+        [{"node": "Preparar Payload com Mídia", "type": "main", "index": 0}]
+      ]
+    },
+    "Gerar Imagem (DALL-E 3)": {
+      "main": [[{"node": "Reunir Mídia Gerada", "type": "main", "index": 0}]]
+    },
+    "Gerar Documento (PDF)": {
+      "main": [[{"node": "Reunir Mídia Gerada", "type": "main", "index": 1}]]
+    },
+    "Gerar Áudio (TTS)": {
+      "main": [[{"node": "Reunir Mídia Gerada", "type": "main", "index": 2}]]
+    },
+    "Reunir Mídia Gerada": {
+      "main": [[{"node": "Preparar Payload com Mídia", "type": "main", "index": 0}]]
+    },
+    "Preparar Payload com Mídia": {
+      "main": [[{"node": "Atualizar Usage Tracking", "type": "main", "index": 0}]]
+    },
+    "Atualizar Usage Tracking": {
+      "main": [[{"node": "Enviar Resposta + Mídia via Chatwoot", "type": "main", "index": 0}]]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": "error-handler"
+  },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 1,
+  "updatedAt": "2025-11-06T00:00:00.000Z",
+  "versionId": "1"
+}

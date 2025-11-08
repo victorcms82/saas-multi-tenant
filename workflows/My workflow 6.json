@@ -1,0 +1,736 @@
+{
+  "name": "My workflow 6",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "chatwoot-webhook",
+        "options": {}
+      },
+      "name": "Chatwoot Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        -1072,
+        96
+      ],
+      "webhookId": "chatwoot-incoming",
+      "id": "e5b330a5-8120-479e-817d-8893a96d84d0"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Identifica cliente, agente e canal\nconst payload = $input.item.json;\n\n// Extrair informações do webhook Chatwoot\nconst conversationId = payload.body?.conversation?.id || payload.conversation?.id;\nconst contactId = payload.body?.sender?.id || payload.sender?.id;\nconst messageBody = payload.body?.content || payload.content || '';\nconst messageType = payload.body?.message_type || payload.message_type;\nconst contentType = payload.body?.content_type || payload.content_type || 'text';\n\n// Extrair custom attributes (onde guardamos client_id e agent_id)\nconst customAttributes = payload.body?.conversation?.custom_attributes || payload.conversation?.custom_attributes || {};\nconst clientId = customAttributes.client_id || 'clinica_sorriso_001';\nconst agentId = customAttributes.agent_id || 'default';\n\n// Canal (whatsapp, email, instagram, etc)\nconst channel = payload.body?.inbox?.channel_type || payload.inbox?.channel_type || 'whatsapp';\n\n// Attachments (mídia que USUÁRIO enviou)\nconst attachments = payload.body?.attachments || payload.attachments || [];\n\nreturn {\n  json: {\n    client_id: clientId,\n    agent_id: agentId,\n    conversation_id: conversationId,\n    contact_id: contactId,\n    channel: channel,\n    message_body: messageBody,\n    message_type: messageType,\n    content_type: contentType,\n    attachments: attachments,\n    has_attachments: attachments.length > 0,\n    timestamp: new Date().toISOString(),\n    original_payload: payload\n  }\n};"
+      },
+      "name": "Identificar Cliente e Agente",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -672,
+        96
+      ],
+      "id": "747c803a-b1e3-43b2-99ff-44bc58115ac7"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.message_type}}",
+              "value2": "incoming"
+            }
+          ]
+        }
+      },
+      "name": "Filtrar Apenas Incoming",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        -384,
+        96
+      ],
+      "id": "24ab9bf6-2cc9-4396-bfb1-84954dbfa3f0"
+    },
+    {
+      "parameters": {
+        "url": "https://vnlfgnfaortdvmraoapq.supabase.co/rest/v1/agents",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "client_id",
+              "value": "=eq.{{$json.client_id}}"
+            },
+            {
+              "name": "agent_id",
+              "value": "=eq.{{$json.agent_id}}"
+            },
+            {
+              "name": "is_active",
+              "value": "=eq.true"
+            },
+            {
+              "name": "select",
+              "value": "*,client_subscriptions(*)"
+            },
+            {
+              "name": "limit",
+              "value": "1"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZubGZnbmZhb3J0ZHZtcmFvYXBxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjE3MTM1NDgsImV4cCI6MjA3NzI4OTU0OH0.Qu6ithTk2tNNG-SYQDN5BP15pb_xKufOQUhqAuwxT0U"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZubGZnbmZhb3J0ZHZtcmFvYXBxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjE3MTM1NDgsImV4cCI6MjA3NzI4OTU0OH0.Qu6ithTk2tNNG-SYQDN5BP15pb_xKufOQUhqAuwxT0U"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Buscar Dados do Agente (HTTP)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        0,
+        0
+      ],
+      "id": "7aecfd04-cd8f-4b3a-b774-29347ccd3a38",
+      "credentials": {
+        "httpCustomAuth": {
+          "id": "NEn6NpNWjE7hCyWQ",
+          "name": "Supabase API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://vnlfgnfaortdvmraoapq.supabase.co/rest/v1/rpc/search_client_media_rules",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZubGZnbmZhb3J0ZHZtcmFvYXBxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjE3MTM1NDgsImV4cCI6MjA3NzI4OTU0OH0.Qu6ithTk2tNNG-SYQDN5BP15pb_xKufOQUhqAuwxT0U"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZubGZnbmZhb3J0ZHZtcmFvYXBxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjE3MTM1NDgsImV4cCI6MjA3NzI4OTU0OH0.Qu6ithTk2tNNG-SYQDN5BP15pb_xKufOQUhqAuwxT0U"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"p_client_id\": \"{{$json.client_id}}\",\n  \"p_agent_id\": \"{{$json.agent_id}}\",\n  \"p_message_body\": \"{{$json.message_body}}\",\n  \"p_conversation_id\": \"{{$json.conversation_id}}\"\n}",
+        "options": {}
+      },
+      "name": "Verificar Regras de Mídia do Acervo (HTTP)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        0,
+        192
+      ],
+      "id": "7ce74125-07d4-4f8f-bbfb-25730b1641c6",
+      "credentials": {
+        "httpCustomAuth": {
+          "id": "NEn6NpNWjE7hCyWQ",
+          "name": "Supabase API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineAll",
+        "options": {}
+      },
+      "name": "Merge Dados (Agente + Mídia)",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [
+        320,
+        96
+      ],
+      "id": "3c98f5fd-80de-4a86-9c45-dd416d4aeaee"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Construir contexto completo: dados do agente + mídia do acervo + mensagem original\nconst items = $input.all();\n\n// Item 0: Dados do webhook (client_id, message_body, etc)\n// Item 1: Dados do agente (system_prompt, tools, etc)\n// Item 2: Regras de mídia (se houver match)\n\nconst webhookData = items[0]?.json || {};\nconst agentData = items[1]?.json?.[0] || {}; // Array do Supabase, pegar primeiro item\nconst mediaRules = items[2]?.json || []; // Pode ser array vazio se não houver match\n\n// Preparar informação sobre mídia do acervo para o LLM\nlet mediaContext = '';\nlet clientMediaAttachments = [];\nlet mediaLogEntries = [];\n\nif (Array.isArray(mediaRules) && mediaRules.length > 0) {\n  mediaContext = '\\n\\n--- MÍDIA DISPONÍVEL PARA ENVIO ---\\n';\n  \n  mediaRules.forEach((media, i) => {\n    mediaContext += `${i+1}. ${media.title || media.file_name} (${media.file_type})\\n`;\n    mediaContext += `   Descrição: ${media.description || 'N/A'}\\n`;\n    mediaContext += `   Disparado por: ${media.trigger_type} - \"${media.trigger_value}\"\\n\\n`;\n    \n    // Preparar attachments para Chatwoot\n    clientMediaAttachments.push({\n      file_url: media.file_url,\n      file_type: media.file_type,\n      file_name: media.file_name,\n      caption: media.title || media.description || ''\n    });\n    \n    // Preparar logs para tracking\n    mediaLogEntries.push({\n      rule_id: media.rule_id,\n      media_id: media.media_id,\n      triggered_by: media.trigger_type,\n      trigger_value: media.trigger_value\n    });\n  });\n  \n  mediaContext += 'IMPORTANTE: Mencione que você está enviando este arquivo anexo na sua resposta ao usuário!\\n';\n}\n\nreturn {\n  json: {\n    // Dados do webhook\n    ...webhookData,\n    \n    // Dados do agente\n    system_prompt: agentData.system_prompt || 'Você é um assistente útil.',\n    llm_model: agentData.llm_model || 'gpt-4o-mini',\n    tools_enabled: agentData.tools_enabled || [],\n    rag_namespace: agentData.rag_namespace,\n    \n    // Contexto de mídia do acervo\n    media_context: mediaContext,\n    client_media_attachments: clientMediaAttachments,\n    media_log_entries: mediaLogEntries,\n    has_client_media: clientMediaAttachments.length > 0,\n    \n    // Subscription data (para usage tracking)\n    subscription: agentData.client_subscriptions?.[0] || {}\n  }\n};"
+      },
+      "name": "Construir Contexto Completo",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        608,
+        96
+      ],
+      "id": "209d9abf-ad9d-4c04-9bf6-4d0030336e79"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Query no RAG usando namespace isolado (PLACEHOLDER - Integrar com Pinecone/Qdrant)\nconst ragNamespace = $input.item.json.rag_namespace;\nconst messageBody = $input.item.json.message_body;\n\n// TODO: Implementar query real no vector DB\nconst ragResults = [];\n\nreturn {\n  json: {\n    ...($input.item.json),\n    rag_results: ragResults,\n    rag_context: ragResults.map(r => r.text).join('\\n\\n')\n  }\n};"
+      },
+      "name": "Query RAG (Namespace Isolado)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        896,
+        96
+      ],
+      "id": "eb1085d4-c69f-4105-a642-cc580d961f7d"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Preparar prompt completo para o LLM\nconst systemPrompt = $input.item.json.system_prompt;\nconst messageBody = $input.item.json.message_body;\nconst ragContext = $input.item.json.rag_context || '';\nconst mediaContext = $input.item.json.media_context || '';\n\nconst fullPrompt = systemPrompt + \n  (ragContext ? '\\n\\n--- CONTEXTO DO RAG ---\\n' + ragContext : '') +\n  mediaContext +\n  '\\n\\n--- MENSAGEM DO USUÁRIO ---\\n' + messageBody;\n\nreturn {\n  json: {\n    ...($input.item.json),\n    llm_prompt: fullPrompt\n  }\n};"
+      },
+      "name": "Preparar Prompt LLM",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1168,
+        96
+      ],
+      "id": "630b9e5e-bce9-44d6-9c74-49493d40b963"
+    },
+    {
+      "parameters": {
+        "model": "={{ $json.llm_model || 'gpt-4o-mini' }}",
+        "prompt": "={{ $json.llm_prompt }}",
+        "options": {
+          "maxTokens": 1000,
+          "temperature": 0.7
+        },
+        "requestOptions": {}
+      },
+      "name": "LLM (GPT-4o-mini + Tools)",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1.1,
+      "position": [
+        1456,
+        96
+      ],
+      "id": "e3807df3-c7bc-4b5c-8542-a44e8cb0b566",
+      "credentials": {
+        "openAiApi": {
+          "id": "AZOIk8m4dEU8S2FP",
+          "name": "OpenAi account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.choices?.[0]?.finish_reason}}",
+              "value2": "tool_calls"
+            }
+          ]
+        }
+      },
+      "name": "Chamou Tool?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        1744,
+        96
+      ],
+      "id": "0005b837-18a2-4880-9c45-d54c0a60c134"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Executar tool calls (Calendar, Sheets, CRM)\nconst toolCalls = $input.item.json.choices?.[0]?.message?.tool_calls || [];\nconst results = [];\n\nfor (const call of toolCalls) {\n  const functionName = call.function.name;\n  const args = JSON.parse(call.function.arguments);\n  \n  // TODO: Implementar chamadas reais às APIs\n  if (functionName === 'create_calendar_event') {\n    results.push({\n      tool: 'calendar',\n      result: `Evento \"${args.title}\" criado para ${args.date}`\n    });\n  } else if (functionName === 'update_sheet') {\n    results.push({\n      tool: 'sheets',\n      result: `Planilha ${args.sheet_id} atualizada`\n    });\n  }\n}\n\nreturn {\n  json: {\n    ...($input.item.json),\n    tool_results: results\n  }\n};"
+      },
+      "name": "Executar Tools",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2016,
+        0
+      ],
+      "id": "f5271a1e-8eb1-474c-b15e-de7e4cc7d692"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extrair resposta final do LLM\nconst llmResponse = $input.item.json.choices?.[0]?.message?.content || 'Desculpe, não consegui processar sua mensagem.';\nconst toolResults = $input.item.json.tool_results || [];\n\nlet finalResponse = llmResponse;\n\nif (toolResults.length > 0) {\n  finalResponse += '\\n\\n' + toolResults.map(r => r.result).join('\\n');\n}\n\nreturn {\n  json: {\n    ...($input.item.json),\n    final_response: finalResponse,\n    response_type: 'text'\n  }\n};"
+      },
+      "name": "Construir Resposta Final",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2288,
+        96
+      ],
+      "id": "6f6696e7-17b3-4e17-b563-a3625689bb3e"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.has_client_media }}",
+              "value2": "true"
+            }
+          ]
+        }
+      },
+      "name": "Tem Mídia do Acervo?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        2576,
+        96
+      ],
+      "id": "29a33d06-2535-40fe-bd7a-db2ade794b5e"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://vnlfgnfaortdvmraoapq.supabase.co/rest/v1/media_send_log",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZubGZnbmZhb3J0ZHZtcmFvYXBxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjE3MTM1NDgsImV4cCI6MjA3NzI4OTU0OH0.Qu6ithTk2tNNG-SYQDN5BP15pb_xKufOQUhqAuwxT0U"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZubGZnbmZhb3J0ZHZtcmFvYXBxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjE3MTM1NDgsImV4cCI6MjA3NzI4OTU0OH0.Qu6ithTk2tNNG-SYQDN5BP15pb_xKufOQUhqAuwxT0U"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=representation"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json.media_log_entries }}",
+        "options": {}
+      },
+      "name": "Registrar Log de Envio (HTTP)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2864,
+        0
+      ],
+      "id": "976300de-f014-453d-a340-ea326475ff75",
+      "credentials": {
+        "httpCustomAuth": {
+          "id": "NEn6NpNWjE7hCyWQ",
+          "name": "Supabase API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineAll",
+        "options": {}
+      },
+      "name": "Merge Final",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [
+        3152,
+        96
+      ],
+      "id": "091fd4ce-4bd7-4db3-9c53-301baeca070e"
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "https://vnlfgnfaortdvmraoapq.supabase.co/rest/v1/client_subscriptions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "client_id",
+              "value": "=eq.{{$json.client_id}}"
+            },
+            {
+              "name": "agent_id",
+              "value": "=eq.{{$json.agent_id}}"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZubGZnbmZhb3J0ZHZtcmFvYXBxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjE3MTM1NDgsImV4cCI6MjA3NzI4OTU0OH0.Qu6ithTk2tNNG-SYQDN5BP15pb_xKufOQUhqAuwxT0U"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZubGZnbmZhb3J0ZHZtcmFvYXBxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjE3MTM1NDgsImV4cCI6MjA3NzI4OTU0OH0.Qu6ithTk2tNNG-SYQDN5BP15pb_xKufOQUhqAuwxT0U"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=representation"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"total_messages\": {{($json.subscription.total_messages || 0) + 1}},\n  \"last_message_at\": \"{{$now}}\",\n  \"updated_at\": \"{{$now}}\"\n}",
+        "options": {}
+      },
+      "name": "Atualizar Usage Tracking (HTTP)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3440,
+        96
+      ],
+      "id": "086db948-1f79-4b51-b61c-094ccf8b9a4e",
+      "credentials": {
+        "httpCustomAuth": {
+          "id": "NEn6NpNWjE7hCyWQ",
+          "name": "Supabase API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://app.chatwoot.com/api/v1/accounts/{{$env.CHATWOOT_ACCOUNT_ID}}/conversations/{{$json.conversation_id}}/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"content\": \"{{$json.final_response}}\",\n  \"message_type\": \"outgoing\",\n  \"private\": false,\n  \"attachments\": {{$json.client_media_attachments || []}}\n}",
+        "options": {}
+      },
+      "name": "Enviar Resposta via Chatwoot",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3728,
+        96
+      ],
+      "id": "6d802910-f6b2-4f7f-bd9a-09fea0ce9cfe",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "6zb8BvpL6QTY95dP",
+          "name": "Chatwoot Header Auth"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Log de erro detalhado\nconst error = $input.item.json.error || {};\nconst clientId = $input.item.json.client_id;\nconst agentId = $input.item.json.agent_id;\n\nconsole.error('ERRO NO WORKFLOW:', {\n  client_id: clientId,\n  agent_id: agentId,\n  error_message: error.message,\n  error_stack: error.stack,\n  timestamp: new Date().toISOString()\n});\n\nreturn {\n  json: {\n    ...($input.item.json),\n    final_response: 'Desculpe, ocorreu um erro temporário. Nossa equipe já foi notificada. Por favor, tente novamente em alguns instantes.',\n    is_error: true\n  }\n};"
+      },
+      "name": "Error Handler",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3728,
+        304
+      ],
+      "id": "7bc62366-d021-478e-a17a-23a977ebc02c"
+    }
+  ],
+  "pinData": {
+    "Chatwoot Webhook": [
+      {
+        "json": {
+          "headers": {
+            "host": "n8n.evolutedigital.com.br",
+            "user-agent": "Mozilla/5.0 (Windows NT 10.0; Microsoft Windows 10.0.26200; pt-BR) PowerShell/7.5.4",
+            "content-length": "570",
+            "accept-encoding": "gzip, deflate, br",
+            "content-type": "application/json",
+            "x-forwarded-for": "179.144.139.75",
+            "x-forwarded-host": "n8n.evolutedigital.com.br",
+            "x-forwarded-port": "443",
+            "x-forwarded-proto": "https",
+            "x-forwarded-server": "4fa76e5acce3",
+            "x-real-ip": "179.144.139.75"
+          },
+          "params": {},
+          "query": {},
+          "body": {
+            "attachments": [],
+            "content_type": "text",
+            "content": "qual o preço?",
+            "created_at": "2025-11-07T22:28:59.815Z",
+            "message_type": "incoming",
+            "inbox": {
+              "name": "WhatsApp Teste",
+              "channel_type": "whatsapp",
+              "id": 1
+            },
+            "conversation": {
+              "custom_attributes": {
+                "agent_id": "default",
+                "client_id": "clinica_sorriso_001"
+              },
+              "status": "open",
+              "id": 99999
+            },
+            "sender": {
+              "phone_number": "+5511999999999",
+              "name": "Cliente Teste",
+              "id": 12345
+            },
+            "event": "message_created"
+          },
+          "webhookUrl": "https://n8n.evolutedigital.com.br/webhook/chatwoot-webhook",
+          "executionMode": "production"
+        }
+      }
+    ]
+  },
+  "connections": {
+    "Chatwoot Webhook": {
+      "main": [
+        [
+          {
+            "node": "Identificar Cliente e Agente",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Identificar Cliente e Agente": {
+      "main": [
+        [
+          {
+            "node": "Filtrar Apenas Incoming",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filtrar Apenas Incoming": {
+      "main": [
+        [
+          {
+            "node": "Buscar Dados do Agente (HTTP)",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Verificar Regras de Mídia do Acervo (HTTP)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Buscar Dados do Agente (HTTP)": {
+      "main": [
+        [
+          {
+            "node": "Merge Dados (Agente + Mídia)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Verificar Regras de Mídia do Acervo (HTTP)": {
+      "main": [
+        [
+          {
+            "node": "Merge Dados (Agente + Mídia)",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge Dados (Agente + Mídia)": {
+      "main": [
+        [
+          {
+            "node": "Construir Contexto Completo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Construir Contexto Completo": {
+      "main": [
+        [
+          {
+            "node": "Query RAG (Namespace Isolado)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Query RAG (Namespace Isolado)": {
+      "main": [
+        [
+          {
+            "node": "Preparar Prompt LLM",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparar Prompt LLM": {
+      "main": [
+        [
+          {
+            "node": "LLM (GPT-4o-mini + Tools)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "LLM (GPT-4o-mini + Tools)": {
+      "main": [
+        [
+          {
+            "node": "Chamou Tool?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Chamou Tool?": {
+      "main": [
+        [
+          {
+            "node": "Executar Tools",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Construir Resposta Final",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Executar Tools": {
+      "main": [
+        [
+          {
+            "node": "Construir Resposta Final",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Construir Resposta Final": {
+      "main": [
+        [
+          {
+            "node": "Tem Mídia do Acervo?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tem Mídia do Acervo?": {
+      "main": [
+        [
+          {
+            "node": "Registrar Log de Envio (HTTP)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Merge Final",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Registrar Log de Envio (HTTP)": {
+      "main": [
+        [
+          {
+            "node": "Merge Final",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge Final": {
+      "main": [
+        [
+          {
+            "node": "Atualizar Usage Tracking (HTTP)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Atualizar Usage Tracking (HTTP)": {
+      "main": [
+        [
+          {
+            "node": "Enviar Resposta via Chatwoot",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "saveExecutionProgress": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "executionTimeout": -1,
+    "availableInMCP": false
+  },
+  "versionId": "b34e161e-957c-4844-9dcf-5ceed53bc61a",
+  "meta": {
+    "instanceId": "569d30e41eb76a1ea495af04713ddcb7e6304e9943292f9d85d95af4c52eb47b"
+  },
+  "id": "UkJeDJDRpkIyYkWz",
+  "tags": []
+}

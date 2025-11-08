@@ -1,0 +1,29 @@
+{
+  "name": "Enviar Resposta via Chatwoot (Header Auth)",
+  "nodes": [
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://app.chatwoot.com/api/v1/accounts/={{$env.CHATWOOT_ACCOUNT_ID}}/conversations/={{$json.conversation_id}}/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"content\": \"{{$json.final_response}}\",\n  \"message_type\": \"outgoing\",\n  \"private\": false,\n  \"attachments\": {{$json.client_media_attachments || []}}\n}",
+        "options": {}
+      },
+      "name": "Enviar Resposta via Chatwoot",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [3200, 112],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "SUBSTITUA_PELO_ID_DA_SUA_CREDENTIAL",
+          "name": "Chatwoot Header Auth"
+        }
+      }
+    }
+  ],
+  "connections": {},
+  "pinData": {}
+}

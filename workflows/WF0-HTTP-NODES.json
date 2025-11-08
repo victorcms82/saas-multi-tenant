@@ -1,0 +1,181 @@
+{
+  "name": "WF0 - HTTP Nodes para Supabase",
+  "nodes": [
+    {
+      "parameters": {
+        "url": "https://vnlfgnfaortdvmraoapq.supabase.co/rest/v1/agents",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{$credentials.apikey}}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{$credentials.apikey}}"
+            }
+          ]
+        },
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "client_id",
+              "value": "=eq.{{$json.client_id}}"
+            },
+            {
+              "name": "agent_id",
+              "value": "=eq.{{$json.agent_id}}"
+            },
+            {
+              "name": "is_active",
+              "value": "=eq.true"
+            },
+            {
+              "name": "select",
+              "value": "*,agent_templates(name),client_subscriptions(*)"
+            },
+            {
+              "name": "limit",
+              "value": "1"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Buscar Dados do Agente (HTTP)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [240, 300],
+      "id": "a1b2c3d4-0001-0000-0000-000000000001"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://vnlfgnfaortdvmraoapq.supabase.co/rest/v1/rpc/search_client_media_rules",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{$credentials.apikey}}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{$credentials.apikey}}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"p_client_id\": \"{{$json.client_id}}\",\n  \"p_agent_id\": \"{{$json.agent_id}}\",\n  \"p_message_body\": \"{{$json.message_body}}\",\n  \"p_conversation_id\": \"{{$json.conversation_id}}\"\n}",
+        "options": {}
+      },
+      "name": "Verificar Regras de Mídia (HTTP)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [460, 300],
+      "id": "a1b2c3d4-0002-0000-0000-000000000002"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://vnlfgnfaortdvmraoapq.supabase.co/rest/v1/media_send_log",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{$credentials.apikey}}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{$credentials.apikey}}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=representation"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{$json.media_log_entries.map(entry => ({\n  client_id: $json.client_id,\n  agent_id: $json.agent_id,\n  conversation_id: $json.conversation_id,\n  rule_id: entry.rule_id,\n  media_id: entry.media_id,\n  triggered_by: entry.triggered_by,\n  trigger_value: entry.trigger_value\n}))}}",
+        "options": {}
+      },
+      "name": "Registrar Log de Envio (HTTP)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [680, 300],
+      "id": "a1b2c3d4-0003-0000-0000-000000000003"
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "https://vnlfgnfaortdvmraoapq.supabase.co/rest/v1/client_subscriptions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{$credentials.apikey}}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{$credentials.apikey}}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=representation"
+            }
+          ]
+        },
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "client_id",
+              "value": "=eq.{{$json.client_id}}"
+            },
+            {
+              "name": "agent_id",
+              "value": "=eq.{{$json.agent_id}}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"total_messages\": {{($json.total_messages || 0) + 1}},\n  \"transcription_minutes_used\": {{($json.transcription_minutes_used || 0) + (($json.total_transcription_seconds || 0) / 60.0)}},\n  \"images_processed\": {{($json.images_processed || 0) + ($json.total_images_processed || 0)}},\n  \"last_message_at\": \"{{$now}}\",\n  \"updated_at\": \"{{$now}}\"\n}",
+        "options": {}
+      },
+      "name": "Atualizar Usage Tracking (HTTP)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [900, 300],
+      "id": "a1b2c3d4-0004-0000-0000-000000000004"
+    }
+  ],
+  "connections": {},
+  "pinData": {}
+}

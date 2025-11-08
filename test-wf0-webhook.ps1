@@ -46,9 +46,10 @@ Write-Host "   $ConversationId" -ForegroundColor $WarningColor
 Write-Host ""
 
 # Payload simulando Chatwoot (mensagem INCOMING do cliente)
+# IMPORTANTE: Chatwoot envia message_type como NÚMERO: 0=incoming, 1=outgoing, 2=activity
 $payload = @{
     event = "message_created"
-    message_type = "incoming"
+    message_type = 0
     content = $MessageBody
     content_type = "text"
     conversation = @{
