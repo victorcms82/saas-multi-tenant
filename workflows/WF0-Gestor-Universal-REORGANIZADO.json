@@ -475,16 +475,122 @@
     },
     {
       "parameters": {
-        "jsCode": "// 🔴 NODE TEMPORARIAMENTE DESABILITADO (teste sem Chatwoot real)\n// Simula envio bem-sucedido\nconst response = {\n  success: true,\n  message_sent: true,\n  conversation_id: $input.item.json.conversation_id,\n  final_response: $input.item.json.final_response,\n  attachments_count: ($input.item.json.client_media_attachments || []).length,\n  timestamp: new Date().toISOString()\n};\n\nconsole.log('✅ SIMULAÇÃO: Resposta enviada ao Chatwoot:', response);\n\nreturn { json: { ...$input.item.json, chatwoot_response: response } };"
+        "method": "POST",
+        "url": "=https://chatwoot.evolutedigital.com.br/api/v1/accounts/1/conversations/{{ $json.conversation_id }}/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "api_access_token",
+              "value": "zL8FNtrajZjGv4LP9BrZiCif"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "content",
+              "value": "={{ $json.final_response }}"
+            },
+            {
+              "name": "message_type",
+              "value": "outgoing"
+            },
+            {
+              "name": "private",
+              "value": false
+            }
+          ]
+        },
+        "options": {}
       },
       "name": "Enviar Resposta via Chatwoot",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
       "position": [
         2800,
         336
       ],
       "id": "24a41b93-1579-469a-9a38-ac575dbcc5a7"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "attachment-check",
+              "leftValue": "={{ ($json.client_media_attachments || []).length }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "name": "Tem Anexos?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        3000,
+        336
+      ],
+      "id": "attachment-check-node"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://chatwoot.evolutedigital.com.br/api/v1/accounts/1/conversations/{{ $json.conversation_id }}/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "api_access_token",
+              "value": "zL8FNtrajZjGv4LP9BrZiCif"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "attachments[]",
+              "value": "={{ $json.client_media_attachments[0].file_url }}"
+            },
+            {
+              "name": "message_type",
+              "value": "outgoing"
+            },
+            {
+              "name": "private",
+              "value": false
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Enviar Anexos Chatwoot",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3200,
+        240
+      ],
+      "id": "send-attachments-node"
     },
     {
       "parameters": {
@@ -728,6 +834,28 @@
         [
           {
             "node": "Enviar Resposta via Chatwoot",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enviar Resposta via Chatwoot": {
+      "main": [
+        [
+          {
+            "node": "Tem Anexos?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tem Anexos?": {
+      "main": [
+        [
+          {
+            "node": "Enviar Anexos Chatwoot",
             "type": "main",
             "index": 0
           }
