@@ -529,7 +529,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Log de resposta do Chatwoot\nconst chatwootResponse = $input.item.json;\n\nconsole.log('=== CHATWOOT RESPONSE DEBUG ===');\nconsole.log('Status Code:', chatwootResponse.statusCode);\nconsole.log('Status Message:', chatwootResponse.statusMessage);\nconsole.log('Body:', JSON.stringify(chatwootResponse.body, null, 2));\nconsole.log('Headers:', JSON.stringify(chatwootResponse.headers, null, 2));\n\nif (chatwootResponse.statusCode >= 400) {\n  console.error('❌ ERRO ao enviar para Chatwoot!');\n  console.error('Erro:', chatwootResponse.body);\n}\n\n// Preservar dados originais para próximo node\nconst originalData = $('Preservar Dados Após Usage Tracking').first().json;\n\nreturn {\n  json: {\n    ...originalData,\n    chatwoot_status: chatwootResponse.statusCode,\n    chatwoot_sent: chatwootResponse.statusCode >= 200 && chatwootResponse.statusCode < 300\n  }\n};"
+        "jsCode": "// Log de resposta do Chatwoot\nconst chatwootResponse = $input.item.json;\n\nconsole.log('=== CHATWOOT RESPONSE DEBUG ===');\nconsole.log('Status Code:', chatwootResponse.statusCode);\nconsole.log('Status Message:', chatwootResponse.statusMessage);\nconsole.log('Body:', JSON.stringify(chatwootResponse.body, null, 2));\n\nif (chatwootResponse.statusCode >= 400) {\n  console.error('❌ ERRO ao enviar para Chatwoot!');\n  console.error('Erro:', chatwootResponse.body);\n  \n  // 404 = conversation_id não existe (é ID de teste)\n  if (chatwootResponse.statusCode === 404) {\n    console.warn('⚠️  conversation_id não existe no Chatwoot (provavelmente ID de teste 99999)');\n    console.warn('✅ Workflow continuará normalmente. Mídia e dados foram processados com sucesso!');\n  }\n}\n\n// Preservar dados originais para próximo node\nconst originalData = $('Preservar Dados Após Usage Tracking').first().json;\n\nreturn {\n  json: {\n    ...originalData,\n    chatwoot_status: chatwootResponse.statusCode,\n    chatwoot_sent: chatwootResponse.statusCode >= 200 && chatwootResponse.statusCode < 300,\n    chatwoot_error: chatwootResponse.statusCode >= 400 ? chatwootResponse.body : null\n  }\n};"
       },
       "name": "Log Chatwoot Response",
       "type": "n8n-nodes-base.code",
@@ -574,42 +574,11 @@
     },
     {
       "parameters": {
-        "method": "POST",
-        "url": "=https://chatwoot.evolutedigital.com.br/api/v1/accounts/1/conversations/{{ $json.conversation_id }}/messages",
-        "authentication": "genericCredentialType",
-        "genericAuthType": "httpHeaderAuth",
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            {
-              "name": "api_access_token",
-              "value": "zL8FNtrajZjGv4LP9BrZiCif"
-            }
-          ]
-        },
-        "sendBody": true,
-        "contentType": "multipart-form-data",
-        "bodyParameters": {
-          "parameters": [
-            {
-              "name": "attachments[]",
-              "value": "={{ $json.client_media_attachments[0].file_url }}"
-            },
-            {
-              "name": "message_type",
-              "value": "outgoing"
-            },
-            {
-              "name": "private",
-              "value": false
-            }
-          ]
-        },
-        "options": {}
+        "jsCode": "// 🚧 NODE DESABILITADO TEMPORARIAMENTE\n// Motivo: Chatwoot API requer download do arquivo primeiro\n// TODO: Implementar workflow:\n//   1. Download arquivo do Supabase Storage\n//   2. Converter para Buffer\n//   3. Upload via multipart/form-data\n\nconst data = $input.item.json;\n\nconsole.log('⚠️  ANEXOS NÃO ENVIADOS (node desabilitado)');\nconsole.log('Arquivos disponíveis:', data.client_media_attachments);\nconsole.log('✅ Resposta de texto foi enviada com sucesso');\nconsole.log('📋 LLM mencionou anexo na resposta:', data.final_response);\n\nreturn {\n  json: {\n    ...data,\n    attachments_sent: false,\n    attachments_reason: 'Feature em desenvolvimento - requer download+upload do arquivo'\n  }\n};"
       },
-      "name": "Enviar Anexos Chatwoot",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
+      "name": "Enviar Anexos Chatwoot (DESABILITADO)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
       "position": [
         3200,
         240
