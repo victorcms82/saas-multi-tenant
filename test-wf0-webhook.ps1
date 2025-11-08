@@ -45,7 +45,7 @@ Write-Host "💬 Conversation ID:" -ForegroundColor $InfoColor
 Write-Host "   $ConversationId" -ForegroundColor $WarningColor
 Write-Host ""
 
-# Payload simulando Chatwoot
+# Payload simulando Chatwoot (mensagem INCOMING do cliente)
 $payload = @{
     event = "message_created"
     message_type = "incoming"
@@ -58,17 +58,30 @@ $payload = @{
             client_id = "clinica_sorriso_001"
             agent_id = "default"
         }
+        meta = @{
+            sender = @{
+                id = 1
+                name = "Cliente Teste"
+                phone_number = "+5511999999999"
+                type = "contact"
+            }
+        }
     }
     sender = @{
-        id = 12345
+        id = 1
         name = "Cliente Teste"
         phone_number = "+5511999999999"
         type = "contact"
+        email = $null
     }
     inbox = @{
         id = 1
-        name = "WhatsApp Teste"
-        channel_type = "whatsapp"
+        name = "API Inbox - Teste"
+        channel_type = "api"
+    }
+    account = @{
+        id = 1
+        name = "Evolute Digital"
     }
     attachments = @()
     created_at = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ss.fffZ")
