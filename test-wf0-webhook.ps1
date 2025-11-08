@@ -63,6 +63,7 @@ $payload = @{
         id = 12345
         name = "Cliente Teste"
         phone_number = "+5511999999999"
+        type = "contact"
     }
     inbox = @{
         id = 1
