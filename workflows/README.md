@@ -12,7 +12,8 @@ Este diretório contém os workflows do n8n para a plataforma de agentes IA mult
 
 | Arquivo | Status | Descrição |
 |---------|--------|-----------|
-| `WF0-Gestor-Universal-COMPLETE.json` | ✅ **NOVO** | Workflow completo com mídia + Chatwoot hub |
+| `WF0-Gestor-Universal-REORGANIZADO.json` | ✅ **PRODUÇÃO** | Workflow otimizado com PDF + multi-tenancy |
+| `WF0-Gestor-Universal-COMPLETE.json` | ⚠️ Anterior | Versão anterior (pré-otimização) |
 | `WF0-Gestor-Universal.json` | ⚠️ Legado | Versão antiga (sem mídia) |
 | `WF0-Gestor-Universal-V2-AGENTS.json` | ⚠️ Legado | Versão com multi-agente parcial |
 | `WF0-Gestor-Universal-Part2-LLM.json` | ⚠️ Legado | Parte 2 antiga |
@@ -35,7 +36,7 @@ Este diretório contém os workflows do n8n para a plataforma de agentes IA mult
 
 ```bash
 # No n8n UI
-Workflows → Import from File → WF0-Gestor-Universal-COMPLETE.json
+Workflows → Import from File → WF0-Gestor-Universal-REORGANIZADO.json
 ```
 
 ### 2. Configurar Credenciais (5 min)
@@ -60,11 +61,35 @@ Enviar mensagem via Chatwoot e verificar resposta!
 
 ---
 
-## 🏗️ WF0 - Gestor Universal COMPLETE
+## 🏗️ WF0 - Gestor Universal (REORGANIZADO)
 
-**Workflow principal completo** com todas as funcionalidades.
+**Workflow principal otimizado** em PRODUÇÃO com todas as funcionalidades.
 
 ### ✨ Funcionalidades
+
+#### 0. **Upload de Anexos PDF para Chatwoot** 🆕
+O agente pode fazer upload de arquivos PDF do Supabase Storage diretamente para o Chatwoot:
+```
+1. LLM gera resposta com nome do arquivo: "Aqui está a tabela de preços"
+2. Workflow busca arquivo no bucket: [client_id]/tabela-precos.pdf
+3. Download binário do Supabase Storage
+4. Upload via Chatwoot API (multipart/form-data)
+5. Arquivo anexado automaticamente à mensagem
+```
+
+**Fluxo técnico**:
+- Node: "Upload Anexo para Chatwoot" (HTTP Request)
+- Método: POST multipart/form-data
+- Binary field: `attachment` (n8n Binary File)
+- Payload: `{ content, message_type, private }`
+- Resultado: Arquivo aparece na conversa do Chatwoot
+
+**Compatível com**: PDF, DOCX, XLSX, PNG, JPG (qualquer tipo de arquivo)
+
+**Requisitos**:
+- `client_media_attachments` preservado no fluxo
+- Supabase Storage bucket configurado: `client-media`
+- Estrutura: `[client_id]/[filename]`
 
 #### 1. **Hub Central - Chatwoot**
 Todos os canais passam pelo Chatwoot:
@@ -104,24 +129,55 @@ Input: video.mp4
 Output: Frames-chave analisados + áudio transcrito
 ```
 
-#### 3. **Multi-Agente**
+#### 3. **Multi-Tenancy Chatwoot** 🆕
+Cada cliente tem **Inbox isolado** e **Agente dedicado**:
+```sql
+-- Tabela clients agora inclui:
+chatwoot_inbox_id INTEGER       -- Inbox dedicado do cliente
+chatwoot_agent_id INTEGER        -- Agente dedicado do cliente
+chatwoot_agent_email TEXT        -- Email do agente
+chatwoot_access_granted BOOLEAN  -- Acesso confirmado
+chatwoot_setup_at TIMESTAMPTZ    -- Data de configuração
+```
+
+**Benefícios**:
+- Isolamento total entre clientes (cada um vê apenas suas conversas)
+- Agente dedicado com email do cliente
+- Configuração via script: `setup-chatwoot-client.ps1`
+- Onboarding automatizado
+
+**Exemplo de uso**:
+```powershell
+.\scripts\setup-chatwoot-client.ps1 `
+  -ClientId "clinica_sorriso_001" `
+  -ClientName "Clínica Sorriso" `
+  -ClientEmail "contato@clinicasorriso.com.br"
+
+# Resultado:
+# - Inbox ID 2 criado
+# - Agent ID 2 criado
+# - Database atualizado
+# - Email de confirmação enviado
+```
+
+#### 4. **Multi-Agente**
 - Identificação por `client_id` + `agent_id`
 - Namespace RAG isolado: `{client_id}/{agent_id}`
 - Configuração individual por agente
 
-#### 4. **RAG (Retrieval-Augmented Generation)**
+#### 5. **RAG (Retrieval-Augmented Generation)**
 - Vector DB: Pinecone / Qdrant / Weaviate
 - Namespace isolado por cliente/agente
 - Top-K resultados mais relevantes
 
-#### 5. **LLM + Function Calling**
+#### 6. **LLM + Function Calling**
 - **Modelo principal**: GPT-4o-mini (70%) + GPT-4o (30%)
 - **Tools disponíveis**:
   - `create_calendar_event`: Google Calendar
   - `update_sheet`: Google Sheets
   - `search_crm`: CRM integration
 
-#### 6. **Usage Tracking Automático**
+#### 7. **Usage Tracking Automático**
 Atualiza `client_subscriptions` após cada interação:
 ```sql
 total_messages += 1
@@ -129,12 +185,12 @@ transcription_minutes_used += audio_duration / 60
 images_processed += image_count
 ```
 
-#### 7. **Buffer & Agrupamento**
+#### 8. **Buffer & Agrupamento**
 - Redis buffer de 5 segundos
 - Agrupa mensagens enviadas rapidamente
 - Previne múltiplas chamadas LLM desnecessárias
 
-#### 8. **Geração de Mídia pelo Agente**
+#### 9. **Geração de Mídia pelo Agente**
 O agente pode **gerar e enviar** mídia automaticamente:
 
 **Imagens** → DALL-E 3
@@ -161,7 +217,8 @@ Workflow gera PDF → Upload Storage → Envia arquivo
 Custo: $0 (processamento local)
 ```
 
-#### 9. **Error Handling**
+#### 10. **Error Handling & Otimização** 🆕
+### Arquitetura (36 nodes)tro "Filtrar Apenas Incoming" bloqueia mensagens outgoing
 - Try/catch em todos os nodes críticos
 - Retry logic com backoff exponencial
 - Fallback para mensagem genérica
@@ -225,10 +282,21 @@ Buscar Dados do DB (agents + subscriptions)
                  ↓
         Enviar Resposta + Mídia via Chatwoot
 ```
-
----
-
-## 📖 Documentação Detalhada
+        Atualizar Usage Tracking (DB)
+                 ↓
+        ┌─── Tem Anexos? ───┐
+        │                   │
+       Sim                 Não
+        │                   │
+        ↓                   ↓
+    [Upload Anexo]    [Texto apenas]
+        │
+        ├─ Download do Supabase Storage
+        ├─ Upload via Chatwoot API
+        └─ Anexo na conversa
+        │
+        └─→ Enviar Resposta + Mídia/Anexo via Chatwoot
+```📖 Documentação Detalhada
 
 ### Para Desenvolvedores
 
@@ -477,25 +545,27 @@ Após cada teste, verificar:
 
 Ver problemas comuns e soluções detalhadas em `WF0-QUICK-START.md`
 
-### Problemas Comuns
-
-- ❌ Webhook não recebe → Verificar URL e configuração Chatwoot
-- ❌ client_id not found → Adicionar custom attributes na conversa
-- ❌ DB connection error → Validar credenciais Supabase
-- ❌ OpenAI rate limit → Verificar quota e billing
-
----
-
-## 📈 Status & Roadmap
-
 ### ✅ Fase 1: Database (100%)
 - Database schema completo
-- Migrations executadas
-- 1 cliente migrado
+- **Migration 007 executada**: Multi-tenancy Chatwoot
+- 1 cliente configurado (clinica_sorriso_001)
 - Sistema validado
 
-### 🟡 Fase 2: Workflow (80%)
-- Workflow JSON criado
+### ✅ Fase 2: Workflow (100%) 🆕
+- Workflow REORGANIZADO em produção
+- **Upload de anexos PDF**: ✅ Implementado e testado
+- **Multi-tenancy**: ✅ Inbox dedicado por cliente
+- **Loop prevention**: ✅ Filtro de mensagens outgoing
+- **Código otimizado**: ✅ Console.log removidos
+- Chatwoot hub configurado e testado
+
+### ⏳ Fase 3: WhatsApp Real (0%)
+- Configurar canal WhatsApp no Chatwoot
+- Testar com número real
+- Validar anexos via WhatsApp
+- Testar com múltiplos clientes
+
+**Status atual**: Database 100% | Workflow 100% | WhatsApp 0%
 - 30 nodes implementados
 - Chatwoot hub configurado
 - **Pendente**: Importar no n8n e testar
@@ -508,14 +578,16 @@ Ver problemas comuns e soluções detalhadas em `WF0-QUICK-START.md`
 
 **Status atual**: Database 100% | Workflow 80% | Integrações 0%
 
----
-
 ## 🚀 Próximos Passos
 
-1. **Importar workflow no n8n** (15 min)
-2. **Configurar credenciais** (10 min) 
-3. **Testar com cliente real** (5 min)
-4. **Validar usage tracking** (5 min)
+1. ✅ ~~Implementar upload de anexos PDF~~ (CONCLUÍDO)
+2. ✅ ~~Configurar multi-tenancy Chatwoot~~ (CONCLUÍDO)
+3. ✅ ~~Otimizar código do workflow~~ (CONCLUÍDO)
+4. ⏳ **Configurar WhatsApp real no Chatwoot** (próximo)
+5. ⏳ **Testar com múltiplos clientes** (após WhatsApp)
+6. ⏳ **Deploy em produção** (após testes)
+
+📖 **Guia completo**: `WF0-QUICK-START.md` (instalação em 10 min)
 
 📖 **Guia completo**: `WF0-QUICK-START.md` (instalação em 10 min)
 
@@ -534,8 +606,8 @@ Ver problemas comuns e soluções detalhadas em `WF0-QUICK-START.md`
 - Chatwoot: https://chatwoot.com/slack
 - Supabase: https://discord.supabase.com
 
----
-
-**Versão**: 2.0.0 (WF0 Complete)  
+**Versão**: 0.3.0 (WF0 REORGANIZADO - PDF + Multi-tenancy)  
+**Última atualização**: 09/11/2025  
+**Status**: ✅ Database | ✅ Workflow | ⏳ WhatsApp Real
 **Última atualização**: 06/11/2025  
 **Status**: ✅ Database | 🟡 Workflow | ⏳ Integrações

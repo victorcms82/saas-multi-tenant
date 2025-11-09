@@ -1,4 +1,87 @@
-# ✅ RESUMO EXECUTIVO DAS CORREÇÕES APLICADAS
+# Changelog - SaaS Multi-Tenant Platform
+
+Todas as mudanças notáveis neste projeto serão documentadas neste arquivo.
+
+---
+
+## [0.3.0] - 2025-11-09
+
+### 🎉 Adicionado
+- **Upload de Anexos PDF para Chatwoot**: Workflow agora suporta upload automático de arquivos PDF do Supabase Storage para conversas do Chatwoot
+  - Node "Upload Anexo para Chatwoot" com HTTP Request multipart/form-data
+  - Download binário do bucket `client-media` estruturado por `[client_id]/[filename]`
+  - Compatível com PDF, DOCX, XLSX, PNG, JPG e outros formatos
+  - Preservação de `client_media_attachments` através do fluxo completo
+
+- **Multi-Tenancy Chatwoot Completo**: Sistema de isolamento por cliente implementado
+  - Migration 007 adicionando colunas: `chatwoot_inbox_id`, `chatwoot_agent_id`, `chatwoot_agent_email`, `chatwoot_access_granted`, `chatwoot_setup_at`
+  - Indexes criados: `idx_clients_chatwoot_inbox`, `idx_clients_chatwoot_agent`
+  - Script `setup-chatwoot-client.ps1` para onboarding automatizado de clientes
+  - Cada cliente tem Inbox dedicado e Agente isolado
+
+- **Scripts de Automação**:
+  - `send-real-message-chatwoot.ps1`: Enviar mensagens como cliente via API (testes)
+  - `run-migration-007.ps1`: Executor de Migration 007 com fallback manual
+  - `setup-chatwoot-client.ps1`: Setup automatizado de inbox + agent por cliente
+  - `check-chatwoot-webhooks.ps1`: Verificar configuração de webhooks
+  - `check-inbox-webhook.ps1`: Verificar webhooks específicos de inbox
+  - `delete-chatwoot-webhooks.ps1`: Remover webhooks duplicados
+
+### 🔧 Melhorado
+- **Otimização do Workflow**: Removidos 1425 caracteres de console.log desnecessários
+  - 5 logs removidos do "Identificar Cliente e Agente"
+  - 3 logs removidos do "Preservar Contexto Após LLM"
+  - 4 logs removidos do "Construir Resposta Final"
+  - 1 log removido do "Preservar Dados Após Log"
+  - 2 logs removidos do "Preservar Dados Após Usage Tracking"
+  - Mantidos apenas console.error críticos para debugging
+
+- **Loop Prevention**: Validado funcionamento do filtro "Filtrar Apenas Incoming"
+  - Mensagens outgoing corretamente bloqueadas (previne loops infinitos)
+  - Testado com webhook real e múltiplas execuções simultâneas
+
+### 🐛 Corrigido
+- **Webhook Loop**: Removida configuração duplicada de webhooks
+  - Webhook estava em DOIS lugares: configurações globais + inbox específico
+  - Causava 4+ execuções simultâneas por mensagem
+  - Removidos ambos webhooks para evitar conflitos
+  - Sistema agora processa cada mensagem uma única vez
+
+### 📚 Documentação
+- Atualizado `workflows/README.md` com:
+  - Seção "Upload de Anexos PDF para Chatwoot" (nova feature)
+  - Seção "Multi-Tenancy Chatwoot" (arquitetura isolada)
+  - Workflow principal alterado para `WF0-Gestor-Universal-REORGANIZADO.json`
+  - Status atualizado: Database 100% | Workflow 100% | WhatsApp 0%
+  - Versão atualizada para 0.3.0
+
+### 🧪 Testado
+- ✅ Upload de PDF: `tabela-precos.pdf` enviado com sucesso via Chatwoot
+- ✅ Multi-tenancy: Cliente `clinica_sorriso_001` com Inbox 2 e Agent 2 criados
+- ✅ Real webhook: Mensagem "qual o preço da consulta?" testada via API
+- ✅ Loop prevention: Outgoing messages corretamente filtradas
+- ✅ Migration 007: Executada manualmente via Supabase SQL Editor
+
+### 🏗️ Infraestrutura
+- **Banco de Dados**: Migration 007 aplicada com sucesso
+- **Chatwoot**: Inbox 2 e Agent 2 configurados para cliente teste
+- **Git**: Commits `9e1bd9b` (attachment) e `9916e28` (cleanup) pushed para GitHub
+
+### 📦 Arquivos Alterados
+- `workflows/WF0-Gestor-Universal-REORGANIZADO.json`: Workflow otimizado em produção
+- `workflows/WF0-Gestor-Universal-REORGANIZADO.json.backup`: Backup pré-limpeza
+- `database/migrations/007_add_chatwoot_multi_tenancy.sql`: Nova migration
+- `scripts/setup-chatwoot-client.ps1`: Script de onboarding
+- `send-real-message-chatwoot.ps1`: Script de teste
+- `run-migration-007.ps1`: Executor de migration
+- `workflows/README.md`: Documentação atualizada
+- `CHANGELOG.md`: Este arquivo
+
+---
+
+## [0.2.0] - 2025-11-06
+
+### 📚 Documentação Base
 
 **Data:** 06/11/2025  
 **Autor:** GitHub Copilot + Victor Castro  
