@@ -1,0 +1,144 @@
+{
+  "nodes": [
+    {
+      "parameters": {
+        "url": "https://vnlfgnfaortdvmraoapq.supabase.co/rest/v1/rpc/get_location_staff_summary",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"p_inbox_id\": {{ $json.original_payload.body.inbox.id || $json.original_payload.inbox.id }}\n}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZubGZnbmZhb3J0ZHZtcmFvYXBxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjE3MTM1NDgsImV4cCI6MjA3NzI4OTU0OH0.Qu6ithTk2tNNG-SYQDN5BP15pb_xKufOQUhqAuwxT0U"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZubGZnbmZhb3J0ZHZtcmFvYXBxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjE3MTM1NDgsImV4cCI6MjA3NzI4OTU0OH0.Qu6ithTk2tNNG-SYQDN5BP15pb_xKufOQUhqAuwxT0U"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "🏢 Detectar Localização e Staff (RPC)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        24,
+        0
+      ],
+      "id": "location-detection-rpc-node",
+      "notes": "Chama get_location_staff_summary(inbox_id) para identificar:\n- Qual localização/unidade (clínica, loja, etc)\n- Lista completa de profissionais disponíveis\n- Horários, serviços e especialidades\n\nRetorna TUDO em um único JSON para injetar no system prompt."
+    },
+    {
+      "parameters": {
+        "jsCode": "// Injetar dados de Location + Staff no contexto do workflow\nconst webhookData = $('Identificar Cliente e Agente').first().json;\nconst locationData = $input.first().json;\n\n// VALIDAÇÃO: Verificar se RPC retornou dados\nif (!locationData || locationData.length === 0) {\n  console.warn('⚠️ ATENÇÃO: get_location_staff_summary não retornou dados.');\n  console.warn('Possíveis causas:');\n  console.warn('1. inbox_id não está vinculado a nenhuma location na tabela locations');\n  console.warn('2. location está com is_active = FALSE');\n  console.warn('3. inbox_id não foi passado corretamente');\n  \n  // Continuar workflow SEM dados de location (fallback)\n  return {\n    json: {\n      ...webhookData,\n      location_context: null,\n      has_location_data: false,\n      location_error: 'No location found for this inbox_id'\n    }\n  };\n}\n\n// Extrair primeiro resultado (sempre retorna array com 1 item)\nconst location = locationData[0] || locationData;\n\nconsole.log('✅ Localização detectada:', location.location_name);\nconsole.log('📊 Total de profissionais:', location.total_staff);\nconsole.log('✅ Disponíveis online:', location.staff_available_online);\n\n// Construir contexto formatado para o LLM\nconst locationContext = `\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n🏢 INFORMAÇÕES DA UNIDADE\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\nNome: ${location.location_name}\nTipo: ${location.location_type}\nEndereço: ${location.address}, ${location.city}\nTelefone: ${location.phone}\nWhatsApp: ${location.whatsapp_number}\n\nHorário de Funcionamento:\n${formatWorkingHours(location.working_hours)}\n\nServiços Oferecidos:\n${formatServices(location.services_offered)}\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n👥 PROFISSIONAIS DISPONÍVEIS (${location.staff_available_online}/${location.total_staff})\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n${formatStaffList(location.staff_list)}\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;\n\n// Funções auxiliares de formatação\nfunction formatWorkingHours(hours) {\n  if (!hours || hours.length === 0) return 'Não informado';\n  \n  const dayNames = {\n    monday: 'Segunda',\n    tuesday: 'Terça',\n    wednesday: 'Quarta',\n    thursday: 'Quinta',\n    friday: 'Sexta',\n    saturday: 'Sábado',\n    sunday: 'Domingo'\n  };\n  \n  return hours.map(h => \n    `  • ${dayNames[h.day] || h.day}: ${h.start} às ${h.end}`\n  ).join('\\n');\n}\n\nfunction formatServices(services) {\n  if (!services || services.length === 0) return 'Não informado';\n  return services.map(s => `  • ${s}`).join('\\n');\n}\n\nfunction formatStaffList(staffList) {\n  if (!staffList || staffList.length === 0) return 'Nenhum profissional disponível no momento.';\n  \n  return staffList.map((staff, index) => {\n    const featured = staff.is_featured ? '⭐ ' : '';\n    const rating = staff.rating ? ` (${staff.rating}⭐)` : '';\n    const services = staff.services && staff.services.length > 0 \n      ? `\\n    Serviços: ${staff.services.join(', ')}`\n      : '';\n    const days = staff.available_days && staff.available_days.length > 0\n      ? `\\n    Disponível: ${formatDays(staff.available_days)}`\n      : '';\n    const duration = staff.appointment_duration\n      ? `\\n    Duração consulta: ${staff.appointment_duration} minutos`\n      : '';\n    const bio = staff.bio\n      ? `\\n    ${staff.bio}`\n      : '';\n    \n    return `\n${index + 1}. ${featured}${staff.name}${rating}\n   ${staff.specialty || staff.role}${services}${days}${duration}${bio}\n`;\n  }).join('\\n');\n}\n\nfunction formatDays(days) {\n  const dayNames = {\n    monday: 'Seg',\n    tuesday: 'Ter',\n    wednesday: 'Qua',\n    thursday: 'Qui',\n    friday: 'Sex',\n    saturday: 'Sáb',\n    sunday: 'Dom'\n  };\n  return days.map(d => dayNames[d] || d).join(', ');\n}\n\n// Retornar contexto enriquecido\nreturn {\n  json: {\n    ...webhookData,\n    location_id: location.location_id,\n    location_name: location.location_name,\n    location_type: location.location_type,\n    location_address: location.address,\n    location_city: location.city,\n    location_phone: location.phone,\n    location_whatsapp: location.whatsapp_number,\n    location_working_hours: location.working_hours,\n    location_services: location.services_offered,\n    staff_total: location.total_staff,\n    staff_available: location.staff_available_online,\n    staff_list: location.staff_list,\n    location_context: locationContext,\n    has_location_data: true,\n    timestamp: new Date().toISOString()\n  }\n};"
+      },
+      "name": "💼 Construir Contexto Location + Staff",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        208,
+        0
+      ],
+      "id": "build-location-context-node",
+      "notes": "Formata os dados retornados pelo RPC em um texto legível para o LLM.\n\nInclui:\n- Informações da unidade (endereço, telefone, horários)\n- Lista de profissionais com especialidades\n- Disponibilidade por dia da semana\n- Serviços oferecidos por cada um\n\nEsse contexto será injetado no system prompt para o LLM saber:\n- De qual unidade é a conversa\n- Quais profissionais pode oferecer\n- Quando cada um está disponível"
+    }
+  ],
+  "connections": {
+    "🏢 Detectar Localização e Staff (RPC)": {
+      "main": [
+        [
+          {
+            "node": "💼 Construir Contexto Location + Staff",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "instructions": {
+    "title": "📍 INSTRUÇÕES DE INSTALAÇÃO - Nodes Multi-Location Detection",
+    "description": "Estes 2 nodes devem ser inseridos ENTRE 'Filtrar Apenas Incoming' e 'Buscar Dados do Agente (HTTP)'",
+    "steps": [
+      {
+        "step": 1,
+        "action": "Abra o workflow 'WF0-Gestor-Universal-FINAL-CORRIGIDO' no n8n"
+      },
+      {
+        "step": 2,
+        "action": "Importe este JSON (Settings → Import from File ou Clipboard)"
+      },
+      {
+        "step": 3,
+        "action": "Conecte os nodes na seguinte ordem:",
+        "connections": [
+          "'Filtrar Apenas Incoming' (saída TRUE) → '🏢 Detectar Localização e Staff (RPC)'",
+          "'🏢 Detectar Localização e Staff (RPC)' → '💼 Construir Contexto Location + Staff'",
+          "'💼 Construir Contexto Location + Staff' → 'Buscar Dados do Agente (HTTP)'"
+        ]
+      },
+      {
+        "step": 4,
+        "action": "Atualizar o node 'Construir Contexto Completo'",
+        "details": "Adicione esta linha no início do código JavaScript:",
+        "code": "const locationContext = item.location_context || '';"
+      },
+      {
+        "step": 5,
+        "action": "No mesmo node 'Construir Contexto Completo', na variável fullContext, adicione:",
+        "code": "const fullContext = `${baseContext}\\n\\n${locationContext}\\n\\n${mediaContext}`;"
+      },
+      {
+        "step": 6,
+        "action": "IMPORTANTE: Configurar chatwoot_inbox_id nas locations",
+        "warning": "As 4 locations precisam ter o campo 'chatwoot_inbox_id' preenchido com o ID real do inbox do Chatwoot.",
+        "sql": "UPDATE locations SET chatwoot_inbox_id = 123456 WHERE location_id = 'bella_barra_001';"
+      },
+      {
+        "step": 7,
+        "action": "Salve e teste o workflow enviando uma mensagem pelo Chatwoot"
+      }
+    ],
+    "validation": {
+      "test1": "Envie uma mensagem qualquer no Chatwoot",
+      "expected1": "O node '🏢 Detectar Localização' deve retornar dados da location",
+      "test2": "Verifique o output do node '💼 Construir Contexto'",
+      "expected2": "Deve mostrar texto formatado com nome da unidade e lista de profissionais"
+    },
+    "troubleshooting": {
+      "error1": "RPC retorna array vazio",
+      "solution1": "Verifique se chatwoot_inbox_id está configurado na tabela locations",
+      "error2": "Node falha com erro 'inbox.id is undefined'",
+      "solution2": "Verifique a estrutura do payload do Chatwoot no node 'Identificar Cliente e Agente'",
+      "error3": "Context não aparece no LLM",
+      "solution3": "Certifique-se de atualizar o node 'Construir Contexto Completo' conforme step 4 e 5"
+    }
+  },
+  "metadata": {
+    "version": "1.0.0",
+    "created_at": "2025-11-11",
+    "author": "GitHub Copilot",
+    "description": "Nodes para detectar localização multi-tenant e injetar contexto de staff no system prompt",
+    "dependencies": [
+      "Migration 011: locations table",
+      "Migration 012: staff table",
+      "Migration 013: RPCs (get_location_staff_summary)"
+    ],
+    "features": [
+      "Detecção automática de localização via inbox_id",
+      "Lista de profissionais disponíveis",
+      "Formatação de contexto para LLM",
+      "Fallback para casos sem location configurada",
+      "Logging detalhado para debug"
+    ]
+  }
+}

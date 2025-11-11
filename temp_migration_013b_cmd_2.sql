@@ -1,0 +1,1 @@
+$$ LANGUAGE plpgsql SECURITY DEFINER;

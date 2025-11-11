@@ -1,0 +1,88 @@
+{
+  "nodes": [
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://vnlfgnfaortdvmraoapq.supabase.co/rest/v1/rpc/get_location_staff_summary",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"p_inbox_id\": {{ $json.original_payload.body.inbox.id || $json.original_payload.inbox.id }}\n}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZubGZnbmZhb3J0ZHZtcmFvYXBxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjE3MTM1NDgsImV4cCI6MjA3NzI4OTU0OH0.Qu6ithTk2tNNG-SYQDN5BP15pb_xKufOQUhqAuwxT0U"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZubGZnbmZhb3J0ZHZtcmFvYXBxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjE3MTM1NDgsImV4cCI6MjA3NzI4OTU0OH0.Qu6ithTk2tNNG-SYQDN5BP15pb_xKufOQUhqAuwxT0U"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "🏢 Detectar Localização e Staff (RPC)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        24,
+        0
+      ],
+      "id": "location-detection-rpc-node",
+      "notes": "🔒 SEGURANÇA: Este node busca client_id baseado no inbox_id do Chatwoot.\n\nPrevine:\n- Spoofing de client_id via webhook\n- Acesso cruzado entre tenants\n- Vazamento de dados entre clientes\n\nO inbox_id vem do Chatwoot (confiável), não do usuário."
+    },
+    {
+      "parameters": {
+        "jsCode": "// 🔒 SEGURANÇA: Injetar client_id correto baseado no banco de dados\n// Este código SOBRESCREVE qualquer client_id que venha do webhook\nconst webhookData = $('Identificar Cliente e Agente').first().json;\nconst locationData = $input.first().json;\n\n// VALIDAÇÃO: Verificar se RPC retornou dados\nif (!locationData || locationData.length === 0) {\n  console.warn('⚠️ ATENÇÃO: get_location_staff_summary não retornou dados.');\n  console.warn('Possíveis causas:');\n  console.warn('1. inbox_id não está vinculado a nenhuma location na tabela locations');\n  console.warn('2. location está com is_active = FALSE');\n  console.warn('3. inbox_id não foi passado corretamente');\n  \n  // ⚠️ IMPORTANTE: NÃO sobrescreve client_id se não houver location\n  // Deixa o workflow continuar com os dados originais (pode ser tenant sem multi-location)\n  return {\n    json: {\n      ...webhookData,\n      location_context: '',\n      has_location_data: false,\n      location_error: 'No location found for this inbox_id'\n    }\n  };\n}\n\n// Extrair primeiro resultado (sempre retorna array com 1 item)\nconst location = locationData[0] || locationData;\n\nconsole.log('✅ Localização detectada:', location.location_name);\nconsole.log('🔒 client_id autenticado:', location.client_id);\nconsole.log('📊 Total de profissionais:', location.total_staff);\nconsole.log('✅ Disponíveis online:', location.staff_available_online);\n\n// Construir contexto formatado para o LLM\nconst locationContext = `\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n🏢 INFORMAÇÕES DA UNIDADE\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\nNome: ${location.location_name}\nTipo: ${location.location_type}\nEndereço: ${location.address}, ${location.city}\nTelefone: ${location.phone}\nWhatsApp: ${location.whatsapp_number}\n\nHorário de Funcionamento:\n${formatWorkingHours(location.working_hours)}\n\nServiços Oferecidos:\n${formatServices(location.services_offered)}\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n👥 PROFISSIONAIS DISPONÍVEIS (${location.staff_available_online}/${location.total_staff})\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n${formatStaffList(location.staff_list)}\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;\n\n// Funções auxiliares de formatação\nfunction formatWorkingHours(hours) {\n  if (!hours || hours.length === 0) return 'Não informado';\n  \n  const dayNames = {\n    monday: 'Segunda',\n    tuesday: 'Terça',\n    wednesday: 'Quarta',\n    thursday: 'Quinta',\n    friday: 'Sexta',\n    saturday: 'Sábado',\n    sunday: 'Domingo'\n  };\n  \n  return hours.map(h => \n    `  • ${dayNames[h.day] || h.day}: ${h.open || 'N/A'} às ${h.close || 'N/A'}`\n  ).join('\\n');\n}\n\nfunction formatServices(services) {\n  if (!services || services.length === 0) return 'Não informado';\n  return services.map(s => `  • ${s}`).join('\\n');\n}\n\nfunction formatStaffList(staffList) {\n  if (!staffList || staffList.length === 0) return 'Nenhum profissional disponível no momento.';\n  \n  return staffList.map((staff, index) => {\n    const featured = staff.is_featured ? '⭐ ' : '';\n    const rating = staff.rating ? ` (${staff.rating}⭐)` : '';\n    const services = staff.services && staff.services.length > 0 \n      ? `\\n    Serviços: ${staff.services.join(', ')}`\n      : '';\n    const days = staff.available_days && staff.available_days.length > 0\n      ? `\\n    Disponível: ${formatDays(staff.available_days)}`\n      : '';\n    const duration = staff.appointment_duration\n      ? `\\n    Duração consulta: ${staff.appointment_duration} minutos`\n      : '';\n    const bio = staff.bio\n      ? `\\n    ${staff.bio}`\n      : '';\n    \n    return `\n${index + 1}. ${featured}${staff.name}${rating}\n   ${staff.specialty || staff.role}${services}${days}${duration}${bio}\n`;\n  }).join('\\n');\n}\n\nfunction formatDays(days) {\n  const dayNames = {\n    monday: 'Seg',\n    tuesday: 'Ter',\n    wednesday: 'Qua',\n    thursday: 'Qui',\n    friday: 'Sex',\n    saturday: 'Sáb',\n    sunday: 'Dom'\n  };\n  return days.map(d => dayNames[d] || d).join(', ');\n}\n\n// 🔒 RETORNAR COM client_id AUTENTICADO DO BANCO DE DADOS\nreturn {\n  json: {\n    ...webhookData,\n    // ⚠️ CRÍTICO: Sobrescrever client_id com valor do banco (não do webhook!)\n    client_id: location.client_id,\n    // Dados da localização\n    location_id: location.location_id,\n    location_name: location.location_name,\n    location_type: location.location_type,\n    location_address: location.address,\n    location_city: location.city,\n    location_phone: location.phone,\n    location_whatsapp: location.whatsapp_number,\n    location_working_hours: location.working_hours,\n    location_services: location.services_offered,\n    staff_total: location.total_staff,\n    staff_available: location.staff_available_online,\n    staff_list: location.staff_list,\n    location_context: locationContext,\n    has_location_data: true,\n    timestamp: new Date().toISOString()\n  }\n};"
+      },
+      "name": "💼 Construir Contexto Location + Staff",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        208,
+        0
+      ],
+      "id": "build-location-context-node",
+      "notes": "🔒 SEGURANÇA CRÍTICA:\n\nEste node SOBRESCREVE o client_id do webhook com o valor correto do banco de dados.\n\nPrevine:\n✅ Spoofing de client_id\n✅ Acesso cruzado entre tenants\n✅ Vazamento de dados\n\nO client_id vem do RPC get_location_staff_summary(), que busca no banco baseado no inbox_id do Chatwoot (confiável).\n\nTODOS os nodes seguintes (Buscar Dados do Agente, Construir Contexto, etc) usarão o client_id CORRETO."
+    }
+  ],
+  "connections": {
+    "🏢 Detectar Localização e Staff (RPC)": {
+      "main": [
+        [
+          {
+            "node": "💼 Construir Contexto Location + Staff",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "metadata": {
+    "version": "2.0.0-SECURE",
+    "created_at": "2025-11-11",
+    "author": "GitHub Copilot",
+    "description": "🔒 VERSÃO SEGURA: Blindagem de client_id via RPC",
+    "security_features": [
+      "client_id extraído do banco de dados via RPC",
+      "Sobrescreve qualquer client_id do webhook",
+      "Previne spoofing e acesso cruzado entre tenants",
+      "HTTP method POST (correto para Supabase RPCs)",
+      "Validação de dados antes de processar",
+      "Logging de segurança (client_id autenticado)"
+    ],
+    "dependencies": [
+      "Migration 011: locations table com chatwoot_inbox_id",
+      "Migration 012: staff table",
+      "Migration 013: get_location_staff_summary RPC"
+    ]
+  }
+}

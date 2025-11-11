@@ -1,0 +1,390 @@
+{
+  "description": "Nodes para adicionar APÓS 'Construir Resposta Final' no WF0",
+  "nodes": [
+    {
+      "parameters": {
+        "jsCode": "// DETECTAR SE HÁ MÍDIA PARA ENVIAR\nconst finalResponse = $input.item.json.final_response || '';\nconst clientMediaAttachments = $input.item.json.client_media_attachments || [];\n\nconsole.log('=== DETECTAR MÍDIA ===');\nconsole.log('final_response:', finalResponse);\nconsole.log('client_media_attachments:', clientMediaAttachments);\n\n// Padrão: <MídiaDisponível:MEDIA_ID> ou simplesmente checar se tem attachments\nconst mediaPattern = /<MídiaDisponível:([a-f0-9-]+)>/gi;\nconst matches = [...finalResponse.matchAll(mediaPattern)];\n\nconst hasMediaToSend = matches.length > 0 || clientMediaAttachments.length > 0;\n\nconsole.log('hasMediaToSend:', hasMediaToSend);\nconsole.log('matches:', matches);\n\nreturn {\n  json: {\n    ...($input.item.json),\n    has_media_to_send: hasMediaToSend,\n    media_matches: matches.map(m => m[1]),\n    // Texto limpo (sem tags)\n    clean_text: finalResponse.replace(/<MídiaDisponível:[^>]+>/g, '').trim()\n  }\n};"
+      },
+      "name": "1️⃣ Detectar Mídia na Resposta",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1500, 336],
+      "id": "detectar-midia-resposta"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "check-media",
+              "leftValue": "={{ $json.has_media_to_send }}",
+              "rightValue": "true",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "name": "2️⃣ Tem Mídia para Enviar?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1700, 336],
+      "id": "tem-midia-enviar"
+    },
+    {
+      "parameters": {
+        "jsCode": "// PREPARAR DADOS DOS ARQUIVOS PARA ENVIAR\nconst clientMediaAttachments = $input.item.json.client_media_attachments || [];\n\nconsole.log('=== PREPARAR ENVIO DE ARQUIVOS ===');\nconsole.log('Arquivos a enviar:', clientMediaAttachments.length);\n\nif (clientMediaAttachments.length === 0) {\n  console.error('❌ Nenhum arquivo para enviar!');\n  return { json: $input.item.json };\n}\n\n// Criar array de arquivos para enviar\nconst filesToSend = clientMediaAttachments.map(media => ({\n  file_url: media.file_url,\n  file_name: media.file_name,\n  mime_type: media.mime_type || 'application/octet-stream',\n  title: media.title,\n  media_id: media.media_id,\n  conversation_id: $input.item.json.conversation_id\n}));\n\nconsole.log('Arquivos preparados:', filesToSend);\n\nreturn {\n  json: {\n    ...($input.item.json),\n    files_to_send: filesToSend\n  }\n};"
+      },
+      "name": "3️⃣ Preparar Arquivos",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1900, 240],
+      "id": "preparar-arquivos"
+    },
+    {
+      "parameters": {
+        "jsCode": "// SPLIT: Criar um item para cada arquivo\nconst filesToSend = $input.item.json.files_to_send || [];\nconst baseData = $input.item.json;\n\nif (filesToSend.length === 0) {\n  return [{ json: baseData }];\n}\n\n// Criar um item para cada arquivo\nreturn filesToSend.map(file => ({\n  json: {\n    ...baseData,\n    current_file: file\n  }\n}));"
+      },
+      "name": "4️⃣ Loop: Cada Arquivo",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2100, 240],
+      "id": "loop-arquivos"
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.current_file.file_url }}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "file"
+            }
+          }
+        }
+      },
+      "name": "5️⃣ Download Arquivo do Supabase",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2300, 240],
+      "id": "download-arquivo-supabase"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://chatwoot.evolutedigital.com.br/api/v1/accounts/1/conversations/{{ $json.current_file.conversation_id }}/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "api_access_token",
+              "value": "zL8FNtrajZjGv4LP9BrZiCif"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "message_type",
+              "value": "outgoing"
+            },
+            {
+              "name": "private",
+              "value": "false"
+            },
+            {
+              "name": "attachments[]",
+              "value": "",
+              "parameterType": "formBinaryData"
+            }
+          ]
+        },
+        "options": {
+          "redirect": {
+            "redirect": {}
+          },
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        }
+      },
+      "name": "6️⃣ Upload Arquivo para Chatwoot",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2500, 240],
+      "id": "upload-arquivo-chatwoot",
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// LOG DO ENVIO DE ARQUIVO\nconst response = $input.item.json;\nconst file = response.current_file || {};\n\nconsole.log('=== RESULTADO ENVIO ARQUIVO ===');\nconsole.log('Arquivo:', file.file_name);\nconsole.log('Status:', response.statusCode);\nconsole.log('Sucesso?', response.statusCode >= 200 && response.statusCode < 300);\n\nif (response.statusCode >= 400) {\n  console.error('❌ ERRO ao enviar arquivo!');\n  console.error('Response:', response.body);\n}\n\nreturn {\n  json: {\n    file_name: file.file_name,\n    file_url: file.file_url,\n    status_code: response.statusCode,\n    sent_successfully: response.statusCode >= 200 && response.statusCode < 300,\n    conversation_id: file.conversation_id\n  }\n};"
+      },
+
+    {
+      "parameters": {
+        "jsCode": "// LOG DO ENVIO DE ARQUIVO\nconst response = $input.item.json;\nconst file = response.current_file || {};\n\nconsole.log('=== RESULTADO ENVIO ARQUIVO ===');\nconsole.log('Arquivo:', file.file_name);\nconsole.log('Status:', response.statusCode);\nconsole.log('Sucesso?', response.statusCode >= 200 && response.statusCode < 300);\n\nif (response.statusCode >= 400) {\n  console.error('❌ ERRO ao enviar arquivo!');\n  console.error('Response:', response.body);\n}\n\nreturn {\n  json: {\n    file_name: file.file_name,\n    file_url: file.file_url,\n    status_code: response.statusCode,\n    sent_successfully: response.statusCode >= 200 && response.statusCode < 300,\n    conversation_id: file.conversation_id\n  }\n};"
+      },
+      "name": "7️⃣ Log Envio Arquivo",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2700, 240],
+      "id": "log-envio-arquivo"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://chatwoot.evolutedigital.com.br/api/v1/accounts/1/conversations/{{ $json.conversation_id }}/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "api_access_token",
+              "value": "zL8FNtrajZjGv4LP9BrZiCif"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "content",
+              "value": "={{ $json.clean_text }}"
+            },
+            {
+              "name": "message_type",
+              "value": "outgoing"
+            },
+            {
+              "name": "private",
+              "value": "false"
+            }
+          ]
+        },
+        "options": {
+          "redirect": {
+            "redirect": {}
+          },
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        }
+      },
+      "name": "8️⃣ Enviar Texto (Sem Mídia)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1900, 432],
+      "id": "enviar-texto-sem-midia",
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// AGUARDAR TODOS OS ENVIOS DE ARQUIVO E DEPOIS ENVIAR TEXTO\nconst baseData = $('2️⃣ Tem Mídia para Enviar?').first().json;\n\nconsole.log('=== ENVIAR TEXTO APÓS ARQUIVOS ===');\nconsole.log('Texto limpo:', baseData.clean_text);\n\nreturn {\n  json: {\n    conversation_id: baseData.conversation_id,\n    clean_text: baseData.clean_text,\n    final_step: true\n  }\n};"
+      },
+      "name": "9️⃣ Preparar Texto Final",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2900, 240],
+      "id": "preparar-texto-final"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://chatwoot.evolutedigital.com.br/api/v1/accounts/1/conversations/{{ $json.conversation_id }}/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "api_access_token",
+              "value": "zL8FNtrajZjGv4LP9BrZiCif"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "content",
+              "value": "={{ $json.clean_text }}"
+            },
+            {
+              "name": "message_type",
+              "value": "outgoing"
+            },
+            {
+              "name": "private",
+              "value": "false"
+            }
+          ]
+        },
+        "options": {
+          "redirect": {
+            "redirect": {}
+          },
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        }
+      },
+      "name": "🔟 Enviar Texto Acompanhando",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [3100, 240],
+      "id": "enviar-texto-com-midia",
+      "continueOnFail": true
+    }
+  ],
+  "connections": {
+    "Construir Resposta Final": {
+      "main": [
+        [
+          {
+            "node": "1️⃣ Detectar Mídia na Resposta",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "1️⃣ Detectar Mídia na Resposta": {
+      "main": [
+        [
+          {
+            "node": "2️⃣ Tem Mídia para Enviar?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+        "2️⃣ Tem Mídia para Enviar?": {
+      "main": [
+        [
+          {
+            "node": "3️⃣ Preparar Arquivos",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "8️⃣ Enviar Texto (Sem Mídia)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "3️⃣ Preparar Arquivos": {
+      "main": [
+        [
+          {
+            "node": "4️⃣ Loop: Cada Arquivo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "4️⃣ Loop: Cada Arquivo": {
+      "main": [
+        [
+          {
+            "node": "5️⃣ Download Arquivo do Supabase",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "5️⃣ Download Arquivo do Supabase": {
+      "main": [
+        [
+          {
+            "node": "6️⃣ Upload Arquivo para Chatwoot",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "6️⃣ Upload Arquivo para Chatwoot": {
+      "main": [
+        [
+          {
+            "node": "7️⃣ Log Envio Arquivo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "7️⃣ Log Envio Arquivo": {
+      "main": [
+        [
+          {
+            "node": "9️⃣ Preparar Texto Final",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "9️⃣ Preparar Texto Final": {
+      "main": [
+        [
+          {
+            "node": "🔟 Enviar Texto Acompanhando",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "INSTRUÇÕES": {
+    "onde_inserir": "Após o node 'Construir Resposta Final' (linha ~390)",
+    "onde_remover": "Remover node 'Enviar Resposta via Chatwoot' antigo (linha ~542)",
+    "fluxo": [
+      "1. Detectar se há mídia na resposta (checa client_media_attachments)",
+      "2. IF: Tem mídia?",
+      "   - SIM: Preparar arquivos → Loop cada arquivo → Enviar via Chatwoot → Enviar texto",
+      "   - NÃO: Enviar apenas texto",
+      "3. Arquivos enviados como attachments[] no multipart/form-data",
+      "4. Texto enviado sem tags <MídiaDisponível>"
+    ],
+    "api_chatwoot_attachments": {
+      "endpoint": "POST /api/v1/accounts/{account_id}/conversations/{conversation_id}/messages",
+      "content_type": "multipart/form-data",
+      "campos": {
+        "message_type": "outgoing",
+        "private": "false",
+        "attachments[]": "URL do arquivo (file_url do Supabase Storage)"
+      },
+      "nota": "Chatwoot aceita URLs públicas em attachments[] - ele baixa e envia"
+    }
+  }
+}
