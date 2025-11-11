@@ -38,7 +38,7 @@ BEGIN
     cm.title::VARCHAR,
     cm.description
   FROM client_media_rules cmr
-  INNER JOIN client_media cm ON cmr.media_id = cm.media_id
+  INNER JOIN client_media cm ON cmr.media_id = cm.id
   WHERE 
     cmr.client_id = p_client_id
     AND cm.client_id = p_client_id
