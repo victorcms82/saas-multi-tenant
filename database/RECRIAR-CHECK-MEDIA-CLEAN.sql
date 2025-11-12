@@ -27,7 +27,7 @@ BEGIN
 
   RETURN QUERY
   SELECT 
-    cmr.rule_id,
+    cmr.id as rule_id,
     cmr.media_id,
     cmr.trigger_type::VARCHAR,
     cmr.trigger_value,
