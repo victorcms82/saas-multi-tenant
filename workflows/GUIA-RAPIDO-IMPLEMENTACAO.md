@@ -45,7 +45,10 @@ https://n8n.evolutedigital.com.br
    }
    ```
 
-6. **Credenciais:** Selecionar `Supabase API`
+6. **Options** → Response:
+   - ✅ **Always Output Data: `true`** ⚠️ IMPORTANTE para funcionar quando não há histórico
+
+7. **Credenciais:** Selecionar `Supabase API`
 
 ---
 
