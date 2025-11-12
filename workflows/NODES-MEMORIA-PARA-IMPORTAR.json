@@ -1,0 +1,139 @@
+{
+  "name": "NODES DE MEMÓRIA - Importar no n8n",
+  "nodes": [
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://vnlfgnfaortdvmraoapq.supabase.co/rest/v1/rpc/get_conversation_history",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZubGZnbmZhb3J0ZHZtcmFvYXBxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjE3MTM1NDgsImV4cCI6MjA3NzI4OTU0OH0.Qu6ithTk2tNNG-SYQDN5BP15pb_xKufOQUhqAuwxT0U"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZubGZnbmZhb3J0ZHZtcmFvYXBxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjE3MTM1NDgsImV4cCI6MjA3NzI4OTU0OH0.Qu6ithTk2tNNG-SYQDN5BP15pb_xKufOQUhqAuwxT0U"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"p_client_id\": \"{{ $json.client_id }}\",\n  \"p_conversation_id\": {{ $json.conversation_id }},\n  \"p_limit\": 10\n}",
+        "options": {}
+      },
+      "name": "🧠 Buscar Histórico de Conversa (RPC)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1000,
+        96
+      ],
+      "id": "memory-node-1-fetch-history",
+      "credentials": {
+        "httpCustomAuth": {
+          "id": "NEn6NpNWjE7hCyWQ",
+          "name": "Supabase API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Formatar histórico de conversa para contexto do LLM\nconst previousData = $('Query RAG (Namespace Isolado)').first().json;\nconst historyData = $input.item.json;\n\n// Verificar se há histórico\nlet conversationHistory = '';\n\nif (Array.isArray(historyData) && historyData.length > 0) {\n  conversationHistory = '\\n\\n--- HISTÓRICO DA CONVERSA ---\\n';\n  \n  // Ordenar do mais antigo para mais recente (invertido)\n  const sortedHistory = [...historyData].reverse();\n  \n  sortedHistory.forEach(msg => {\n    const role = msg.message_role === 'user' ? '👤 Cliente' : '🤖 Assistente';\n    const timestamp = new Date(msg.message_timestamp).toLocaleString('pt-BR');\n    \n    conversationHistory += `\\n[${timestamp}] ${role}:\\n${msg.message_content}\\n`;\n  });\n  \n  conversationHistory += '\\n--- FIM DO HISTÓRICO ---\\n';\n  conversationHistory += '\\n📌 IMPORTANTE: Use o histórico acima para manter consistência nas respostas e entender o contexto da conversa atual.\\n';\n  \n  console.log('✅ Histórico carregado:', historyData.length, 'mensagens');\n} else {\n  conversationHistory = '\\n\\n--- NOVA CONVERSA (sem histórico anterior) ---\\n';\n  console.log('ℹ️ Primeira mensagem da conversa');\n}\n\nreturn {\n  json: {\n    ...previousData,\n    conversation_history: conversationHistory,\n    history_messages_count: historyData.length || 0\n  }\n};"
+      },
+      "name": "📝 Formatar Histórico para LLM",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1200,
+        96
+      ],
+      "id": "memory-node-2-format-history"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://vnlfgnfaortdvmraoapq.supabase.co/rest/v1/rpc/save_conversation_message",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZubGZnbmZhb3J0ZHZtcmFvYXBxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjE3MTM1NDgsImV4cCI6MjA3NzI4OTU0OH0.Qu6ithTk2tNNG-SYQDN5BP15pb_xKufOQUhqAuwxT0U"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZubGZnbmZhb3J0ZHZtcmFvYXBxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjE3MTM1NDgsImV4cCI6MjA3NzI4OTU0OH0.Qu6ithTk2tNNG-SYQDN5BP15pb_xKufOQUhqAuwxT0U"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "bodyParametersJson": "={{ $json }}",
+        "options": {
+          "batching": {
+            "batch": {
+              "batchSize": 1
+            }
+          }
+        }
+      },
+      "name": "💾 Salvar em Memória (User + Assistant)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2700,
+        96
+      ],
+      "id": "memory-node-3-save-messages",
+      "alwaysOutputData": true,
+      "credentials": {
+        "httpCustomAuth": {
+          "id": "NEn6NpNWjE7hCyWQ",
+          "name": "Supabase API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Preparar DUAS mensagens para salvar: usuário + assistente\nconst data = $input.item.json;\n\n// Mensagem 1: Usuário (input)\nconst userMessage = {\n  p_client_id: data.client_id,\n  p_conversation_id: data.conversation_id,\n  p_message_role: 'user',\n  p_message_content: data.message_body,\n  p_contact_id: data.contact_id,\n  p_agent_id: data.agent_id,\n  p_channel: data.channel,\n  p_has_attachments: data.has_attachments || false,\n  p_attachments: data.attachments || [],\n  p_metadata: {\n    timestamp: data.timestamp\n  }\n};\n\n// Mensagem 2: Assistente (output)\nconst assistantMessage = {\n  p_client_id: data.client_id,\n  p_conversation_id: data.conversation_id,\n  p_message_role: 'assistant',\n  p_message_content: data.final_response,\n  p_contact_id: data.contact_id,\n  p_agent_id: data.agent_id,\n  p_channel: data.channel,\n  p_has_attachments: data.has_client_media || false,\n  p_attachments: data.client_media_attachments || [],\n  p_metadata: {\n    llm_model: data.llm_model || 'gpt-4o-mini',\n    had_tool_calls: data.tool_results && data.tool_results.length > 0,\n    history_count: data.history_messages_count || 0\n  }\n};\n\nconsole.log('💾 Preparando para salvar 2 mensagens na memória');\nconsole.log('User message:', userMessage.p_message_content.substring(0, 50));\nconsole.log('Assistant message:', assistantMessage.p_message_content.substring(0, 50));\n\n// Retornar ambas as mensagens como array\n// n8n vai processar cada uma separadamente devido ao batching\nreturn [\n  { json: userMessage },\n  { json: assistantMessage }\n];"
+      },
+      "name": "📦 Preparar Mensagens para Memória",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2500,
+        96
+      ],
+      "id": "memory-node-4-prepare-messages"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Preservar dados originais após salvar na memória\nconst originalData = $('Construir Resposta Final').first().json;\nconst memorySaveResults = $input.all();\n\nconsole.log('✅ Mensagens salvas na memória:', memorySaveResults.length);\n\n// Extrair IDs salvos (se retornados)\nconst savedIds = memorySaveResults.map(r => r.json || r).filter(id => id);\n\nreturn {\n  json: {\n    ...originalData,\n    memory_saved: true,\n    memory_message_ids: savedIds,\n    memory_save_count: memorySaveResults.length\n  }\n};"
+      },
+      "name": "🔄 Preservar Dados Após Memória",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2900,
+        96
+      ],
+      "id": "memory-node-5-preserve-data"
+    }
+  ],
+  "connections": {},
+  "pinData": {}
+}
