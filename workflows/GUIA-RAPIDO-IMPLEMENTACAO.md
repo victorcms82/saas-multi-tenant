@@ -107,6 +107,7 @@ https://n8n.evolutedigital.com.br
 
 5. **Options** → Response:
    - ✅ Always Output Data: `true`
+   - **Response Format: `Text`** ⚠️ IMPORTANTE: RPC retorna UUID como texto, não JSON
 
 ---
 
@@ -200,6 +201,12 @@ Se o erro persistir, executar:
 ```sql
 DROP FUNCTION IF EXISTS get_conversation_history(VARCHAR, VARCHAR, INTEGER);
 ```
+
+### Erro: "Response body is not valid JSON"
+**Problema:** Node "💾 Salvar em Memória" esperando JSON mas RPC retorna texto (UUID)
+**Solução:** 
+- Options → Response → **Response Format: `Text`** (não JSON)
+- ✅ Corrigido no guia
 
 ### Erro: "Function get_conversation_history does not exist"
 - Migration não foi executada
