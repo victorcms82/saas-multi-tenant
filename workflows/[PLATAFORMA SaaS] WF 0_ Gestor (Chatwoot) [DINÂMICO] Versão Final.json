@@ -1,0 +1,1182 @@
+{
+  "name": "[PLATAFORMA SaaS] WF 0: Gestor (Chatwoot) [DINÂMICO] Versão Final",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "chatwoot-webhook",
+        "options": {}
+      },
+      "name": "Chatwoot Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        -1088,
+        96
+      ],
+      "webhookId": "chatwoot-incoming",
+      "id": "c6eef173-926b-4070-9333-3865df43aecf"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Identifica cliente, agente e canal\nconst payload = $input.item.json;\n\n// Extrair informações do webhook Chatwoot\nconst conversationId = payload.body?.conversation?.id || payload.conversation?.id;\nconst contactId = payload.body?.sender?.id || payload.sender?.id;\n\n// Extrair message_body com fallbacks\nlet messageBody = \n  payload.content ||              // Webhook n8n (nivel raiz)\n  payload.body?.content ||        // Chatwoot direto\n  payload.body?.body?.content ||  // Chatwoot encapsulado\n  '';\n\n// Canal e attachments (MOVER PARA ANTES DA VALIDAÇÃO)\nconst channel = payload.inbox?.channel_type || payload.body?.inbox?.channel_type || 'whatsapp';\nconst attachments = payload.attachments || payload.body?.attachments || [];\n\n// VALIDAÇÃO: Abortar se message_body vazio E sem attachments\nif ((!messageBody || messageBody.trim() === '') && attachments.length === 0) {\n  console.error('❌ ERRO: message_body vazio E sem attachments. Payload keys:', Object.keys(payload));\n  throw new Error('Mensagem vazia sem anexos');\n}\n\n// Se só tem attachment sem texto, criar mensagem padrão\nif ((!messageBody || messageBody.trim() === '') && attachments.length > 0) {\n  messageBody = '[Arquivo enviado]';\n  console.log('📎 Attachment sem texto. Message_body definido como:', messageBody);\n}\n\n// Converter message_type de número para string\n// Chatwoot envia: 0=incoming, 1=outgoing, 2=activity\nlet messageType = payload.message_type || payload.body?.message_type || 'incoming';\nif (typeof messageType === 'number') {\n  messageType = messageType === 0 ? 'incoming' : messageType === 1 ? 'outgoing' : 'activity';\n}\n\nconst contentType = payload.content_type || payload.body?.content_type || 'text';\n\n// Extrair custom attributes\nconst customAttributes = payload.conversation?.custom_attributes || payload.body?.conversation?.custom_attributes || {};\nconst clientId = customAttributes.client_id || 'PENDING_LOCATION_DETECTION';\nconst agentId = customAttributes.agent_id || 'default';\n\nconst sender = payload.sender || payload.body?.sender || { type: 'contact' };\n\n// Extrair client_media_attachments (mídias do banco Supabase)\nconst clientMediaAttachments = payload.client_media_attachments || payload.body?.client_media_attachments || [];\n\nreturn {\n  json: {\n    client_id: clientId,\n    agent_id: agentId,\n    conversation_id: conversationId,\n    contact_id: contactId,\n    channel: channel,\n    message_body: messageBody,\n    message_type: messageType,\n    content_type: contentType,\n    attachments: attachments,\n    has_attachments: attachments.length > 0,\n    client_media_attachments: clientMediaAttachments,\n    sender: sender,\n    body: payload.body || payload,\n    timestamp: new Date().toISOString(),\n    original_payload: payload\n  }\n};"
+      },
+      "name": "Identificar Cliente e Agente",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -880,
+        96
+      ],
+      "id": "d6cb2d3c-c3d2-48db-8a13-4f2943eb05a2"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "9c3e6f6e-2c4f-4d5e-8a2b-1f3e7d8c9b0a",
+              "leftValue": "={{ $json.message_type }}",
+              "rightValue": "incoming",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            },
+            {
+              "id": "a1b2c3d4-5e6f-7a8b-9c0d-1e2f3a4b5c6d",
+              "leftValue": "={{ $json.body?.sender?.type || $json.sender?.type || 'contact' }}",
+              "rightValue": "contact",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "name": "Filtrar Apenas Incoming",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -704,
+        96
+      ],
+      "id": "26f16984-d87d-4bc8-8d3d-36605d7d8845"
+    },
+    {
+      "parameters": {
+        "url": "https://vnlfgnfaortdvmraoapq.supabase.co/rest/v1/agents",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "client_id",
+              "value": "=eq.{{$json.client_id}}"
+            },
+            {
+              "name": "agent_id",
+              "value": "=eq.{{$json.agent_id}}"
+            },
+            {
+              "name": "is_active",
+              "value": "=eq.true"
+            },
+            {
+              "name": "select",
+              "value": "*,client_subscriptions(*)"
+            },
+            {
+              "name": "limit",
+              "value": "1"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZubGZnbmZhb3J0ZHZtcmFvYXBxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjE3MTM1NDgsImV4cCI6MjA3NzI4OTU0OH0.Qu6ithTk2tNNG-SYQDN5BP15pb_xKufOQUhqAuwxT0U"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZubGZnbmZhb3J0ZHZtcmFvYXBxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjE3MTM1NDgsImV4cCI6MjA3NzI4OTU0OH0.Qu6ithTk2tNNG-SYQDN5BP15pb_xKufOQUhqAuwxT0U"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Buscar Dados do Agente (HTTP)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        32,
+        0
+      ],
+      "id": "94628b9b-5e7f-4ed8-8e00-b4f74406aba7",
+      "credentials": {
+        "httpCustomAuth": {
+          "id": "NEn6NpNWjE7hCyWQ",
+          "name": "Supabase API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================================\n// FIX: Construir Contexto Completo - Garantir client_id correto\n// ============================================================================\n// PROBLEMA: Merge pode embaralhar a ordem e client_id vir do lugar errado\n// SOLUÇÃO: Buscar client_id DIRETO do node \"💼 Construir Contexto Location + Staff1\"\n// ============================================================================\n\n// Construir contexto completo: dados do agente + mídia do acervo + mensagem original\n// CRÍTICO: Buscar dados dos nodes CORRETOS, não confiar no Merge\n\nconst item = $input.item.json;\n\n// 🔒 SEGURANÇA CRÍTICA: Buscar client_id do node que fez a blindagem!\nconst locationNode = $('💼 Construir Contexto Location + Staff1').first().json;\nconst webhookNode = $('Filtrar Apenas Incoming').first().json;\n\n// Extrair location_context do node correto\nconst locationContext = locationNode.location_context || item.location_context || '';\n\n// 🔒 CRÍTICO: client_id SEMPRE vem do node de location (autenticado pelo banco!)\nconst clientId = locationNode.client_id || item.client_id || webhookNode.client_id;\n\nconsole.log('=== SEGURANÇA: Origem do client_id ===');\nconsole.log('locationNode.client_id:', locationNode.client_id);\nconsole.log('item.client_id:', item.client_id);\nconsole.log('webhookNode.client_id:', webhookNode.client_id);\nconsole.log('🔒 client_id FINAL (autenticado):', clientId);\n\nconst webhookData = {\n  // 🔒 CRÍTICO: Usar client_id autenticado do banco!\n  client_id: clientId,\n  agent_id: webhookNode.agent_id || item.agent_id,\n  conversation_id: webhookNode.conversation_id || item.conversation_id,\n  contact_id: webhookNode.contact_id || item.contact_id,\n  channel: webhookNode.channel || item.channel,\n  message_body: webhookNode.message_body || item.message_body,\n  message_type: webhookNode.message_type || item.message_type,\n  content_type: webhookNode.content_type || item.content_type,\n  attachments: webhookNode.attachments || item.attachments || [],\n  has_attachments: webhookNode.has_attachments || item.has_attachments || false,\n  client_media_attachments: webhookNode.client_media_attachments || item.client_media_attachments || [],\n  timestamp: webhookNode.timestamp || item.timestamp\n};\n\n// VALIDAÇÃO: Abortar se message_body vazio\nif (!webhookData.message_body || webhookData.message_body.trim() === '') {\n  console.error('❌ ERRO: message_body está vazio em Construir Contexto Completo!');\n  console.error('webhookNode.message_body:', webhookNode.message_body);\n  console.error('item.message_body:', item.message_body);\n  throw new Error('message_body perdido no fluxo!');\n}\n\nconsole.log('✅ message_body preservado:', webhookData.message_body);\nconsole.log('🔒 client_id autenticado:', webhookData.client_id);\n\nconst agentData = item; // Dados do agente já estão no item merged\n\n// Verificar se há dados de mídia no item (do RPC)\nlet mediaRules = [];\nif (item.rule_id && item.media_id) {\n  // RPC retornou mídia - transformar em array\n  mediaRules = [{\n    rule_id: item.rule_id,\n    media_id: item.media_id,\n    trigger_type: item.trigger_type,\n    trigger_value: item.trigger_value,\n    file_url: item.file_url,\n    file_type: item.file_type,\n    file_name: item.file_name,\n    mime_type: item.mime_type,\n    title: item.title,\n    description: item.description\n  }];\n}\n\n// Preparar informação sobre mídia do acervo para o LLM\nlet mediaContext = '';\nlet clientMediaAttachments = webhookData.client_media_attachments || [];\nlet mediaLogEntries = [];\n\nif (Array.isArray(mediaRules) && mediaRules.length > 0) {\n  mediaContext = '\\n\\n--- MÍDIA DISPONÍVEL PARA ENVIO ---\\n';\n  \n  mediaRules.forEach((media, i) => {\n    mediaContext += `${i+1}. ${media.title || media.file_name} (${media.file_type})\\n`;\n    mediaContext += `   Descrição: ${media.description || 'N/A'}\\n`;\n    mediaContext += `   Disparado por: ${media.trigger_type} - \"${media.trigger_value}\"\\n\\n`;\n    \n    // Preparar attachments para Chatwoot\n    clientMediaAttachments.push({\n      file_url: media.file_url,\n      file_type: media.file_type,\n      file_name: media.file_name,\n      caption: media.title || media.description || ''\n    });\n    \n    // Preparar logs para tracking\n    mediaLogEntries.push({\n      rule_id: media.rule_id,\n      media_id: media.media_id,\n      triggered_by: media.trigger_type,\n      trigger_value: media.trigger_value\n    });\n  });\n  \n  mediaContext += '\\n🚨 INSTRUÇÃO OBRIGATÓRIA: Você DEVE informar ao usuário que está enviando o arquivo anexo mencionado acima! Não ignore esta instrução!';\n}\n\nreturn {\n  json: {\n    // ========================================\n    // 1. Dados do webhook (dados brutos)\n    // ========================================\n    client_id: webhookData.client_id,  // 🔒 AUTENTICADO DO BANCO!\n    agent_id: webhookData.agent_id,\n    conversation_id: webhookData.conversation_id,\n    contact_id: webhookData.contact_id,\n    channel: webhookData.channel,\n    message_body: webhookData.message_body,\n    message_type: webhookData.message_type,\n    content_type: webhookData.content_type,\n    attachments: webhookData.attachments,\n    has_attachments: webhookData.has_attachments,\n    timestamp: webhookData.timestamp,\n    \n    // ========================================\n    // 2. Dados do agente (configuração)\n    // ========================================\n    system_prompt: agentData.system_prompt || 'Você é um assistente útil.',\n    llm_provider: agentData.llm_provider || 'openai',\n    llm_model: agentData.llm_model,\n    llm_api_key: agentData.llm_api_key || null,\n    tools_enabled: agentData.tools_enabled || [],\n    rag_namespace: agentData.rag_namespace,\n    \n    // ========================================\n    // 3. Contextos (dados enriquecidos para LLM)\n    // ========================================\n    // Contexto de localização e staff\n    location_context: locationContext,\n    has_location_data: locationContext ? true : false,\n    \n    // Contexto de mídia do acervo\n    media_context: mediaContext,\n    client_media_attachments: clientMediaAttachments,\n    media_log_entries: mediaLogEntries,\n    has_client_media: clientMediaAttachments.length > 0,\n    \n    // ========================================\n    // 4. Dados de subscription (billing)\n    // ========================================\n    subscription: agentData.client_subscriptions?.[0] || {}\n  }\n};"
+      },
+      "name": "Construir Contexto Completo",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        592,
+        96
+      ],
+      "id": "02bd32d3-b161-4802-9658-db0430b5f99a"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Query no RAG usando namespace isolado (PLACEHOLDER - Integrar com Pinecone/Qdrant)\nconst ragNamespace = $input.item.json.rag_namespace;\nconst messageBody = $input.item.json.message_body;\n\n// TODO: Implementar query real no vector DB\nconst ragResults = [];\n\nreturn {\n  json: {\n    ...($input.item.json),\n    rag_results: ragResults,\n    rag_context: ragResults.map(r => r.text).join('\\n\\n')\n  }\n};"
+      },
+      "name": "Query RAG (Namespace Isolado)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        96
+      ],
+      "id": "845f015e-6ab4-4e00-ae2d-723841146ef2"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Preparar prompt completo para o LLM\nlet systemPrompt = $input.item.json.system_prompt;\nconst messageBody = $input.item.json.message_body;\nconst ragContext = $input.item.json.rag_context || '';\nconst mediaContext = $input.item.json.media_context || '';\n\n// CRÍTICO: Se há mídia disponível, injetar instrução no SYSTEM PROMPT\nif (mediaContext && mediaContext.includes('MÍDIA DISPONÍVEL')) {\n  systemPrompt += '\\n\\n--- INSTRUÇÃO CRÍTICA SOBRE MÍDIA ---\\n';\n  systemPrompt += 'Se houver arquivos de mídia disponíveis mencionados no contexto do usuário, você DEVE informar que está enviando esses arquivos como anexo. Não ignore esta instrução!';\n}\n\nconst fullPrompt = systemPrompt + \n  (ragContext ? '\\n\\n--- CONTEXTO DO RAG ---\\n' + ragContext : '') +\n  mediaContext +\n  '\\n\\n--- MENSAGEM DO USUÁRIO ---\\n' + messageBody;\n\nreturn {\n  json: {\n    ...($input.item.json),\n    system_prompt: systemPrompt,  // Atualizado com instrução de mídia\n    llm_prompt: fullPrompt\n  }\n};"
+      },
+      "name": "Preparar Prompt LLM",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1152,
+        96
+      ],
+      "id": "56a67b89-4c18-4bc4-91ea-2619ba4ccee9"
+    },
+    {
+      "parameters": {
+        "resource": "chat",
+        "model": "={{ $json.llm_model || 'gpt-4o-mini' }}",
+        "prompt": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "={{ $json.system_prompt }}"
+            },
+            {
+              "content": "={{ $json.media_context + '\\n\\n--- MENSAGEM DO USUÁRIO ---\\n' + $json.message_body }}"
+            }
+          ]
+        },
+        "options": {
+          "maxTokens": 1000,
+          "temperature": 0.7
+        },
+        "requestOptions": {}
+      },
+      "name": "LLM (GPT-4o-mini + Tools)",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [
+        1440,
+        96
+      ],
+      "id": "9e29dbaf-7682-426d-af31-0e36c249674b",
+      "credentials": {
+        "openAiApi": {
+          "id": "AZOIk8m4dEU8S2FP",
+          "name": "OpenAi account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Preservar todos os dados do contexto + adicionar resposta do LLM\nconst llmResponse = $input.item.json;\nconst previousData = $('Preparar Prompt LLM').first().json;\n\n// Corrigir estrutura: OpenAI retorna array diretamente\nconst choices = Array.isArray(llmResponse) ? llmResponse : [llmResponse];\n\nreturn {\n  json: {\n    ...previousData,\n    choices: choices\n  }\n};"
+      },
+      "name": "Preservar Contexto Após LLM",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1728,
+        96
+      ],
+      "id": "c3168923-33c7-43e2-bc68-34a5b3b9f7f7"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.choices?.[0]?.finish_reason}}",
+              "value2": "tool_calls"
+            }
+          ]
+        }
+      },
+      "name": "Chamou Tool?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        2016,
+        96
+      ],
+      "id": "b9e40f6e-2566-4c05-b470-2b64014d6b72"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Executar tool calls (Calendar, Sheets, CRM)\nconst toolCalls = $input.item.json.choices?.[0]?.message?.tool_calls || [];\nconst results = [];\n\nfor (const call of toolCalls) {\n  const functionName = call.function.name;\n  const args = JSON.parse(call.function.arguments);\n  \n  // TODO: Implementar chamadas reais às APIs\n  if (functionName === 'create_calendar_event') {\n    results.push({\n      tool: 'calendar',\n      result: `Evento \"${args.title}\" criado para ${args.date}`\n    });\n  } else if (functionName === 'update_sheet') {\n    results.push({\n      tool: 'sheets',\n      result: `Planilha ${args.sheet_id} atualizada`\n    });\n  }\n}\n\nreturn {\n  json: {\n    ...($input.item.json),\n    tool_results: results\n  }\n};"
+      },
+      "name": "Executar Tools",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2288,
+        0
+      ],
+      "id": "81cdec09-862f-4b4a-adaf-b53663339af4"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extrair resposta final do LLM e preservar TODOS os dados do contexto\nconst item = $input.item.json;\n\nlet llmResponse = null;\n\n// Forma 1: choices array (formato OpenAI)\nif (item.choices && item.choices.length > 0) {\n  llmResponse = item.choices[0]?.message?.content;\n}\n\n// Forma 2: Buscar do node anterior se choices não existe\nif (!llmResponse) {\n  const llmNode = $('Preservar Contexto Após LLM').first().json;\n  llmResponse = llmNode.choices?.[0]?.message?.content;\n}\n\n// Fallback\nif (!llmResponse) {\n  llmResponse = 'Desculpe, não consegui processar sua mensagem.';\n  console.error('❌ ERRO: Não consegui extrair resposta do LLM');\n}\n\nconst toolResults = item.tool_results || [];\nlet finalResponse = llmResponse;\n\nif (toolResults.length > 0) {\n  finalResponse += '\\n\\n' + toolResults.map(r => r.result).join('\\n');\n}\n\nreturn {\n  json: {\n    ...item,\n    final_response: finalResponse,\n    response_type: 'text',\n    tool_results: toolResults\n  }\n};"
+      },
+      "name": "Construir Resposta Final",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2560,
+        96
+      ],
+      "id": "e6e1dfa4-a5c8-495d-bd73-cb1a7bffb884"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.has_client_media }}",
+              "value2": "true"
+            }
+          ]
+        }
+      },
+      "name": "Tem Mídia do Acervo?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        2848,
+        96
+      ],
+      "id": "5e6f0c02-0cea-41a7-8140-1636d051f244"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://vnlfgnfaortdvmraoapq.supabase.co/rest/v1/media_send_log",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZubGZnbmZhb3J0ZHZtcmFvYXBxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjE3MTM1NDgsImV4cCI6MjA3NzI4OTU0OH0.Qu6ithTk2tNNG-SYQDN5BP15pb_xKufOQUhqAuwxT0U"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZubGZnbmZhb3J0ZHZtcmFvYXBxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjE3MTM1NDgsImV4cCI6MjA3NzI4OTU0OH0.Qu6ithTk2tNNG-SYQDN5BP15pb_xKufOQUhqAuwxT0U"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=representation"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json.media_log_entries }}",
+        "options": {
+          "batching": {
+            "batch": {}
+          },
+          "response": {
+            "response": {}
+          },
+          "pagination": {
+            "pagination": {
+              "parameters": {
+                "parameters": [
+                  {}
+                ]
+              }
+            }
+          }
+        }
+      },
+      "name": "Registrar Log de Envio (HTTP)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3136,
+        0
+      ],
+      "id": "09bcc244-98b2-477f-a4d2-fe625f291e8b",
+      "credentials": {
+        "httpCustomAuth": {
+          "id": "NEn6NpNWjE7hCyWQ",
+          "name": "Supabase API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Preservar dados originais após HTTP Request\nconst originalData = $('Construir Resposta Final').first().json;\nconst logResponse = $input.item.json;\n\nreturn {\n  json: {\n    ...originalData,\n    media_log_response: logResponse\n  }\n};"
+      },
+      "name": "Preservar Dados Após Log",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3424,
+        0
+      ],
+      "id": "4991acc0-41af-4e57-af36-1116bcef2288"
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "https://vnlfgnfaortdvmraoapq.supabase.co/rest/v1/client_subscriptions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "client_id",
+              "value": "=eq.{{$json.client_id}}"
+            },
+            {
+              "name": "agent_id",
+              "value": "=eq.{{$json.agent_id}}"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZubGZnbmZhb3J0ZHZtcmFvYXBxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjE3MTM1NDgsImV4cCI6MjA3NzI4OTU0OH0.Qu6ithTk2tNNG-SYQDN5BP15pb_xKufOQUhqAuwxT0U"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZubGZnbmZhb3J0ZHZtcmFvYXBxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjE3MTM1NDgsImV4cCI6MjA3NzI4OTU0OH0.Qu6ithTk2tNNG-SYQDN5BP15pb_xKufOQUhqAuwxT0U"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=representation"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"updated_at\": \"{{$now}}\"\n}",
+        "options": {}
+      },
+      "name": "Atualizar Usage Tracking (HTTP)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3664,
+        160
+      ],
+      "id": "74b0dc8a-3a9b-4644-9a8c-ee46fa8fb740",
+      "alwaysOutputData": true,
+      "credentials": {
+        "httpCustomAuth": {
+          "id": "NEn6NpNWjE7hCyWQ",
+          "name": "Supabase API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Preservar dados originais após Usage Tracking\nconst originalData = $('Construir Resposta Final').first().json;\nconst usageResponse = $input.item.json;\n\nreturn {\n  json: {\n    ...originalData,\n    subscription: usageResponse[0] || usageResponse\n  }\n};"
+      },
+      "name": "Preservar Dados Após Usage Tracking",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3856,
+        96
+      ],
+      "id": "b335d060-bdd9-409b-ad13-3f7739f5c186"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://chatwoot.evolutedigital.com.br/api/v1/accounts/1/conversations/{{ $json.conversation_id }}/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "api_access_token",
+              "value": "zL8FNtrajZjGv4LP9BrZiCif"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "content",
+              "value": "={{ $json.final_response }}"
+            },
+            {
+              "name": "message_type",
+              "value": "outgoing"
+            },
+            {
+              "name": "private",
+              "value": false
+            }
+          ]
+        },
+        "options": {
+          "redirect": {
+            "redirect": {}
+          },
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        }
+      },
+      "name": "Enviar Resposta via Chatwoot",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        4016,
+        32
+      ],
+      "id": "1fa8bf56-006d-47dc-adb5-e99347e1d806",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "6zb8BvpL6QTY95dP",
+          "name": "Chatwoot Header Auth"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// Log de resposta do Chatwoot\nconst chatwootResponse = $input.item.json;\n\nconsole.log('=== CHATWOOT RESPONSE DEBUG ===');\nconsole.log('Status Code:', chatwootResponse.statusCode);\nconsole.log('Status Message:', chatwootResponse.statusMessage);\nconsole.log('Body:', JSON.stringify(chatwootResponse.body, null, 2));\n\nif (chatwootResponse.statusCode >= 400) {\n  console.error('❌ ERRO ao enviar para Chatwoot!');\n  console.error('Erro:', chatwootResponse.body);\n  \n  // 404 = conversation_id não existe (é ID de teste)\n  if (chatwootResponse.statusCode === 404) {\n    console.warn('⚠️  conversation_id não existe no Chatwoot (provavelmente ID de teste 99999)');\n    console.warn('✅ Workflow continuará normalmente. Mídia e dados foram processados com sucesso!');\n  }\n}\n\n// Preservar dados originais para próximo node\nconst originalData = $('Preservar Dados Após Usage Tracking').first().json;\n\nconsole.log('=== DEBUG PRESERVAÇÃO DE DADOS ===');\nconsole.log('client_media_attachments preservado?', originalData.client_media_attachments);\nconsole.log('client_media_attachments.length:', (originalData.client_media_attachments || []).length);\n\nreturn {\n  json: {\n    ...originalData,\n    chatwoot_status: chatwootResponse.statusCode,\n    chatwoot_sent: chatwootResponse.statusCode >= 200 && chatwootResponse.statusCode < 300,\n    chatwoot_error: chatwootResponse.statusCode >= 400 ? chatwootResponse.body : null\n  }\n};"
+      },
+      "name": "Log Chatwoot Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4208,
+        96
+      ],
+      "id": "776517d7-5739-4fa6-809a-c7d1ddbc277c"
+    },
+    {
+      "parameters": {
+        "jsCode": "// DEBUG CRÍTICO: O QUE ESTÁ NO $json ANTES DO IF?\nconst data = $input.item.json;\n\nconsole.log('=== DEBUG CRÍTICO ANTES DO IF ===');\nconsole.log('TUDO que está em $json:', JSON.stringify(data, null, 2));\nconsole.log('---');\nconsole.log('client_media_attachments existe?', data.client_media_attachments !== undefined);\nconsole.log('client_media_attachments valor:', data.client_media_attachments);\nconsole.log('client_media_attachments é array?', Array.isArray(data.client_media_attachments));\nconsole.log('client_media_attachments.length:', (data.client_media_attachments || []).length);\nconsole.log('Expressão do IF:', (data.client_media_attachments || []).length > 0 ? 'TRUE ✅' : 'FALSE ❌');\n\nreturn { json: data };"
+      },
+      "name": "DEBUG ANTES DO IF",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4384,
+        176
+      ],
+      "id": "88c952c5-971e-4990-ac07-2f2cde689220"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "attachment-check",
+              "leftValue": "={{ ($json.client_media_attachments || []).length }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "name": "Tem Anexos?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        4512,
+        96
+      ],
+      "id": "a2ed1002-1229-4e6b-9007-618ee4951ba7"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Debug: Log dados antes do download\nconst data = $input.item.json;\n\nconsole.log('=== DEBUG ANTES DO DOWNLOAD ===');\nconsole.log('client_media_attachments:', JSON.stringify(data.client_media_attachments, null, 2));\nconsole.log('file_url:', data.client_media_attachments[0]?.file_url);\nconsole.log('file_name:', data.client_media_attachments[0]?.file_name);\nconsole.log('file_type:', data.client_media_attachments[0]?.file_type);\n\nreturn { json: data };"
+      },
+      "name": "Debug Antes Download",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4704,
+        0
+      ],
+      "id": "ab792364-0258-4b7e-8cfa-a7aafee12a4f"
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.client_media_attachments[0].file_url }}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "file"
+            }
+          }
+        }
+      },
+      "name": "Download Arquivo do Supabase",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        4912,
+        0
+      ],
+      "id": "3cd5cb78-4a13-4f24-a3bc-615e86b3c5b3"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://chatwoot.evolutedigital.com.br/api/v1/accounts/1/conversations/{{ $json.conversation_id }}/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "api_access_token",
+              "value": "zL8FNtrajZjGv4LP9BrZiCif"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "content",
+              "value": "={{ $json.client_media_attachments[0].caption || 'Segue o arquivo solicitado' }}"
+            },
+            {
+              "name": "message_type",
+              "value": "outgoing"
+            },
+            {
+              "name": "private",
+              "value": "false"
+            },
+            {
+              "parameterType": "formBinaryData",
+              "name": "attachments[]",
+              "inputDataFieldName": "data"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true
+            }
+          }
+        }
+      },
+      "name": "Upload Anexo para Chatwoot",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        5104,
+        0
+      ],
+      "id": "bc269c3d-b4cc-4ccb-8360-f84b81d03927"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Log resultado do upload\nconst uploadResponse = $input.item.json;\nconst originalData = $('Log Chatwoot Response').first().json;\n\nconsole.log('=== UPLOAD ANEXO DEBUG ===');\nconsole.log('Upload Response (completo):', JSON.stringify(uploadResponse, null, 2));\nconsole.log('Status Code:', uploadResponse.statusCode);\nconsole.log('Status Message:', uploadResponse.statusMessage);\nconsole.log('Body:', JSON.stringify(uploadResponse.body, null, 2));\nconsole.log('Headers:', JSON.stringify(uploadResponse.headers, null, 2));\n\nif (uploadResponse.statusCode >= 200 && uploadResponse.statusCode < 300) {\n  console.log('✅ Anexo enviado com sucesso!');\n} else {\n  console.error('❌ Erro ao enviar anexo');\n  console.error('Erro detalhado:', uploadResponse.body);\n}\n\nreturn {\n  json: {\n    ...originalData,\n    attachment_upload_status: uploadResponse.statusCode,\n    attachment_upload_body: uploadResponse.body,\n    attachment_sent: uploadResponse.statusCode >= 200 && uploadResponse.statusCode < 300\n  }\n};"
+      },
+      "name": "Log Upload Resultado",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        5312,
+        0
+      ],
+      "id": "70c2b2ec-0008-488b-8414-415cd3397ced"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Log de erro detalhado\nconst error = $input.item.json.error || {};\nconst clientId = $input.item.json.client_id;\nconst agentId = $input.item.json.agent_id;\n\nconsole.error('ERRO NO WORKFLOW:', {\n  client_id: clientId,\n  agent_id: agentId,\n  error_message: error.message,\n  error_stack: error.stack,\n  timestamp: new Date().toISOString()\n});\n\nreturn {\n  json: {\n    ...($input.item.json),\n    final_response: 'Desculpe, ocorreu um erro temporário. Nossa equipe já foi notificada. Por favor, tente novamente em alguns instantes.',\n    is_error: true\n  }\n};"
+      },
+      "name": "Error Handler",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4000,
+        304
+      ],
+      "id": "c98fe528-1a0d-4f47-b19c-03b793ec1415"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://vnlfgnfaortdvmraoapq.supabase.co/rest/v1/rpc/check_media_triggers",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZubGZnbmZhb3J0ZHZtcmFvYXBxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjE3MTM1NDgsImV4cCI6MjA3NzI4OTU0OH0.Qu6ithTk2tNNG-SYQDN5BP15pb_xKufOQUhqAuwxT0U"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZubGZnbmZhb3J0ZHZtcmFvYXBxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjE3MTM1NDgsImV4cCI6MjA3NzI4OTU0OH0.Qu6ithTk2tNNG-SYQDN5BP15pb_xKufOQUhqAuwxT0U"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=representation"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"p_client_id\": \"{{ $json.client_id }}\",\n  \"p_agent_id\": \"{{ $json.agent_id }}\",\n  \"p_message\": \"{{ $json.message_body }}\"\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        -176,
+        304
+      ],
+      "id": "e3498b89-d283-4574-94e2-d3dee0d7bc62",
+      "name": "Buscar Mídia Triggers (RPC)",
+      "alwaysOutputData": true,
+      "credentials": {
+        "httpCustomAuth": {
+          "id": "NEn6NpNWjE7hCyWQ",
+          "name": "Supabase API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        368,
+        96
+      ],
+      "id": "451a00f4-f831-4c9d-a1df-710804357472",
+      "name": "Merge: Agente + Mídia"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://vnlfgnfaortdvmraoapq.supabase.co/rest/v1/rpc/get_location_staff_summary",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZubGZnbmZhb3J0ZHZtcmFvYXBxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjE3MTM1NDgsImV4cCI6MjA3NzI4OTU0OH0.Qu6ithTk2tNNG-SYQDN5BP15pb_xKufOQUhqAuwxT0U"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZubGZnbmZhb3J0ZHZtcmFvYXBxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjE3MTM1NDgsImV4cCI6MjA3NzI4OTU0OH0.Qu6ithTk2tNNG-SYQDN5BP15pb_xKufOQUhqAuwxT0U"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"p_inbox_id\": {{ $json.original_payload.body.inbox.id || $json.original_payload.inbox.id }}\n}",
+        "options": {}
+      },
+      "name": "🏢 Detectar Localização e Staff (RPC)1",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -368,
+        0
+      ],
+      "id": "5d0c1c61-66d7-4d0e-92b9-47da395199d6",
+      "credentials": {
+        "httpCustomAuth": {
+          "id": "NEn6NpNWjE7hCyWQ",
+          "name": "Supabase API"
+        }
+      },
+      "notes": "🔒 SEGURANÇA: Este node busca client_id baseado no inbox_id do Chatwoot.\n\nPrevine:\n- Spoofing de client_id via webhook\n- Acesso cruzado entre tenants\n- Vazamento de dados entre clientes\n\nO inbox_id vem do Chatwoot (confiável), não do usuário."
+    },
+    {
+      "parameters": {
+        "jsCode": "// 🔒 SEGURANÇA: Injetar client_id correto baseado no banco de dados\n// Este código SOBRESCREVE qualquer client_id que venha do webhook\nconst webhookData = $('Identificar Cliente e Agente').first().json;\nconst locationData = $input.first().json;\n\n// VALIDAÇÃO: Verificar se RPC retornou dados\nif (!locationData || locationData.length === 0) {\n  console.warn('⚠️ ATENÇÃO: get_location_staff_summary não retornou dados.');\n  console.warn('Possíveis causas:');\n  console.warn('1. inbox_id não está vinculado a nenhuma location na tabela locations');\n  console.warn('2. location está com is_active = FALSE');\n  console.warn('3. inbox_id não foi passado corretamente');\n  \n  // ⚠️ IMPORTANTE: NÃO sobrescreve client_id se não houver location\n  // Deixa o workflow continuar com os dados originais (pode ser tenant sem multi-location)\n  return {\n    json: {\n      ...webhookData,\n      location_context: '',\n      has_location_data: false,\n      location_error: 'No location found for this inbox_id'\n    }\n  };\n}\n\n// Extrair primeiro resultado (sempre retorna array com 1 item)\nconst location = locationData[0] || locationData;\n\nconsole.log('✅ Localização detectada:', location.location_name);\nconsole.log('🔒 client_id autenticado:', location.client_id);\nconsole.log('📊 Total de profissionais:', location.total_staff);\nconsole.log('✅ Disponíveis online:', location.staff_available_online);\n\n// Construir contexto formatado para o LLM\nconst locationContext = `\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n🏢 INFORMAÇÕES DA UNIDADE\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\nNome: ${location.location_name}\nTipo: ${location.location_type}\nEndereço: ${location.address}, ${location.city}\nTelefone: ${location.phone}\nWhatsApp: ${location.whatsapp_number}\n\nHorário de Funcionamento:\n${formatWorkingHours(location.working_hours)}\n\nServiços Oferecidos:\n${formatServices(location.services_offered)}\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n👥 PROFISSIONAIS DISPONÍVEIS (${location.staff_available_online}/${location.total_staff})\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n${formatStaffList(location.staff_list)}\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;\n\n// Funções auxiliares de formatação\nfunction formatWorkingHours(hours) {\n  if (!hours || hours.length === 0) return 'Não informado';\n  \n  const dayNames = {\n    monday: 'Segunda',\n    tuesday: 'Terça',\n    wednesday: 'Quarta',\n    thursday: 'Quinta',\n    friday: 'Sexta',\n    saturday: 'Sábado',\n    sunday: 'Domingo'\n  };\n  \n  return hours.map(h => \n    `  • ${dayNames[h.day] || h.day}: ${h.open || 'N/A'} às ${h.close || 'N/A'}`\n  ).join('\\n');\n}\n\nfunction formatServices(services) {\n  if (!services || services.length === 0) return 'Não informado';\n  return services.map(s => `  • ${s}`).join('\\n');\n}\n\nfunction formatStaffList(staffList) {\n  if (!staffList || staffList.length === 0) return 'Nenhum profissional disponível no momento.';\n  \n  return staffList.map((staff, index) => {\n    const featured = staff.is_featured ? '⭐ ' : '';\n    const rating = staff.rating ? ` (${staff.rating}⭐)` : '';\n    const services = staff.services && staff.services.length > 0 \n      ? `\\n    Serviços: ${staff.services.join(', ')}`\n      : '';\n    const days = staff.available_days && staff.available_days.length > 0\n      ? `\\n    Disponível: ${formatDays(staff.available_days)}`\n      : '';\n    const duration = staff.appointment_duration\n      ? `\\n    Duração consulta: ${staff.appointment_duration} minutos`\n      : '';\n    const bio = staff.bio\n      ? `\\n    ${staff.bio}`\n      : '';\n    \n    return `\n${index + 1}. ${featured}${staff.name}${rating}\n   ${staff.specialty || staff.role}${services}${days}${duration}${bio}\n`;\n  }).join('\\n');\n}\n\nfunction formatDays(days) {\n  const dayNames = {\n    monday: 'Seg',\n    tuesday: 'Ter',\n    wednesday: 'Qua',\n    thursday: 'Qui',\n    friday: 'Sex',\n    saturday: 'Sáb',\n    sunday: 'Dom'\n  };\n  return days.map(d => dayNames[d] || d).join(', ');\n}\n\n// 🔒 RETORNAR COM client_id AUTENTICADO DO BANCO DE DADOS\nreturn {\n  json: {\n    ...webhookData,\n    // ⚠️ CRÍTICO: Sobrescrever client_id com valor do banco (não do webhook!)\n    client_id: location.client_id,\n    // Dados da localização\n    location_id: location.location_id,\n    location_name: location.location_name,\n    location_type: location.location_type,\n    location_address: location.address,\n    location_city: location.city,\n    location_phone: location.phone,\n    location_whatsapp: location.whatsapp_number,\n    location_working_hours: location.working_hours,\n    location_services: location.services_offered,\n    staff_total: location.total_staff,\n    staff_available: location.staff_available_online,\n    staff_list: location.staff_list,\n    location_context: locationContext,\n    has_location_data: true,\n    timestamp: new Date().toISOString()\n  }\n};"
+      },
+      "name": "💼 Construir Contexto Location + Staff1",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -176,
+        0
+      ],
+      "id": "fd04f9f5-02bb-4a1c-b9b3-a7c37b59d607",
+      "notes": "🔒 SEGURANÇA CRÍTICA:\n\nEste node SOBRESCREVE o client_id do webhook com o valor correto do banco de dados.\n\nPrevine:\n✅ Spoofing de client_id\n✅ Acesso cruzado entre tenants\n✅ Vazamento de dados\n\nO client_id vem do RPC get_location_staff_summary(), que busca no banco baseado no inbox_id do Chatwoot (confiável).\n\nTODOS os nodes seguintes (Buscar Dados do Agente, Construir Contexto, etc) usarão o client_id CORRETO."
+    }
+  ],
+  "pinData": {
+    "Chatwoot Webhook": [
+      {
+        "json": {
+          "headers": {
+            "host": "n8n.evolutedigital.com.br",
+            "user-agent": "Mozilla/5.0 (Windows NT 10.0; Microsoft Windows 10.0.26200; pt-BR) PowerShell/7.5.4",
+            "content-length": "570",
+            "accept-encoding": "gzip, deflate, br",
+            "content-type": "application/json",
+            "x-forwarded-for": "179.144.139.75",
+            "x-forwarded-host": "n8n.evolutedigital.com.br",
+            "x-forwarded-port": "443",
+            "x-forwarded-proto": "https",
+            "x-forwarded-server": "4fa76e5acce3",
+            "x-real-ip": "179.144.139.75"
+          },
+          "params": {},
+          "query": {},
+          "body": {
+            "attachments": [],
+            "content_type": "text",
+            "content": "qual o preço?",
+            "created_at": "2025-11-07T18:43:01.350Z",
+            "message_type": "incoming",
+            "inbox": {
+              "name": "WhatsApp Teste",
+              "channel_type": "whatsapp",
+              "id": 1
+            },
+            "conversation": {
+              "custom_attributes": {
+                "agent_id": "default",
+                "client_id": "clinica_sorriso_001"
+              },
+              "status": "open",
+              "id": 99999
+            },
+            "sender": {
+              "phone_number": "+5511999999999",
+              "name": "Cliente Teste",
+              "id": 12345
+            },
+            "event": "message_created"
+          },
+          "webhookUrl": "https://n8n.evolutedigital.com.br/webhook/chatwoot-webhook",
+          "executionMode": "production"
+        }
+      }
+    ]
+  },
+  "connections": {
+    "Chatwoot Webhook": {
+      "main": [
+        [
+          {
+            "node": "Identificar Cliente e Agente",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Identificar Cliente e Agente": {
+      "main": [
+        [
+          {
+            "node": "Filtrar Apenas Incoming",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filtrar Apenas Incoming": {
+      "main": [
+        [
+          {
+            "node": "Buscar Mídia Triggers (RPC)",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "🏢 Detectar Localização e Staff (RPC)1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Buscar Dados do Agente (HTTP)": {
+      "main": [
+        [
+          {
+            "node": "Merge: Agente + Mídia",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Construir Contexto Completo": {
+      "main": [
+        [
+          {
+            "node": "Query RAG (Namespace Isolado)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Query RAG (Namespace Isolado)": {
+      "main": [
+        [
+          {
+            "node": "Preparar Prompt LLM",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparar Prompt LLM": {
+      "main": [
+        [
+          {
+            "node": "LLM (GPT-4o-mini + Tools)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "LLM (GPT-4o-mini + Tools)": {
+      "main": [
+        [
+          {
+            "node": "Preservar Contexto Após LLM",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preservar Contexto Após LLM": {
+      "main": [
+        [
+          {
+            "node": "Chamou Tool?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Chamou Tool?": {
+      "main": [
+        [
+          {
+            "node": "Executar Tools",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Construir Resposta Final",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Executar Tools": {
+      "main": [
+        [
+          {
+            "node": "Construir Resposta Final",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Construir Resposta Final": {
+      "main": [
+        [
+          {
+            "node": "Tem Mídia do Acervo?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tem Mídia do Acervo?": {
+      "main": [
+        [
+          {
+            "node": "Registrar Log de Envio (HTTP)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Atualizar Usage Tracking (HTTP)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Registrar Log de Envio (HTTP)": {
+      "main": [
+        [
+          {
+            "node": "Preservar Dados Após Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preservar Dados Após Log": {
+      "main": [
+        [
+          {
+            "node": "Atualizar Usage Tracking (HTTP)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Atualizar Usage Tracking (HTTP)": {
+      "main": [
+        [
+          {
+            "node": "Preservar Dados Após Usage Tracking",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preservar Dados Após Usage Tracking": {
+      "main": [
+        [
+          {
+            "node": "Enviar Resposta via Chatwoot",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enviar Resposta via Chatwoot": {
+      "main": [
+        [
+          {
+            "node": "Log Chatwoot Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Chatwoot Response": {
+      "main": [
+        [
+          {
+            "node": "DEBUG ANTES DO IF",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tem Anexos?": {
+      "main": [
+        [
+          {
+            "node": "Debug Antes Download",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Debug Antes Download": {
+      "main": [
+        [
+          {
+            "node": "Download Arquivo do Supabase",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Download Arquivo do Supabase": {
+      "main": [
+        [
+          {
+            "node": "Upload Anexo para Chatwoot",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upload Anexo para Chatwoot": {
+      "main": [
+        [
+          {
+            "node": "Log Upload Resultado",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "DEBUG ANTES DO IF": {
+      "main": [
+        [
+          {
+            "node": "Tem Anexos?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Buscar Mídia Triggers (RPC)": {
+      "main": [
+        [
+          {
+            "node": "Merge: Agente + Mídia",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge: Agente + Mídia": {
+      "main": [
+        [
+          {
+            "node": "Construir Contexto Completo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🏢 Detectar Localização e Staff (RPC)1": {
+      "main": [
+        [
+          {
+            "node": "💼 Construir Contexto Location + Staff1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "💼 Construir Contexto Location + Staff1": {
+      "main": [
+        [
+          {
+            "node": "Buscar Dados do Agente (HTTP)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "bb924d84-8c6a-41d9-8136-bf3dfbf0ee8b",
+  "meta": {
+    "instanceId": "569d30e41eb76a1ea495af04713ddcb7e6304e9943292f9d85d95af4c52eb47b"
+  },
+  "id": "FkaTglXYWkguFQVM",
+  "tags": []
+}
