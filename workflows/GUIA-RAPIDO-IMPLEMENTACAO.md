@@ -190,6 +190,14 @@ Vou criar os 3 arquivos JavaScript que você precisa:
 - Verificar se conexões estão corretas
 - Node anterior deve passar dados com client_id
 
+### Erro: "PGRST203 - Could not choose the best candidate function"
+**Problema:** Existe função duplicada no banco
+**Solução executada:** ✅ Função antiga removida
+Se o erro persistir, executar:
+```sql
+DROP FUNCTION IF EXISTS get_conversation_history(VARCHAR, VARCHAR, INTEGER);
+```
+
 ### Erro: "Function get_conversation_history does not exist"
 - Migration não foi executada
 - Executar: `psql -f database/migrations/019_create_conversation_memory.sql`
