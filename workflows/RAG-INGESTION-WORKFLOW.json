@@ -1,0 +1,210 @@
+{
+  "name": "RAG Document Ingestion",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "rag-upload",
+        "options": {},
+        "responseMode": "lastNode"
+      },
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [250, 300],
+      "webhookId": "rag-upload-webhook",
+      "id": "webhook-rag-upload"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Validar payload\nconst payload = $input.item.json;\n\n// Extrair dados\nconst clientId = payload.client_id;\nconst agentId = payload.agent_id || 'default';\nconst documentUrl = payload.document_url;\nconst documentType = payload.document_type; // 'pdf', 'txt', 'url'\nconst fileName = payload.file_name;\nconst metadata = payload.metadata || {};\n\n// Validações\nif (!clientId) {\n  throw new Error('client_id é obrigatório');\n}\n\nif (!documentUrl && !payload.content) {\n  throw new Error('document_url ou content é obrigatório');\n}\n\nconsole.log('=== RAG INGESTION INICIADO ===');\nconsole.log('Client ID:', clientId);\nconsole.log('Agent ID:', agentId);\nconsole.log('Document Type:', documentType);\nconsole.log('File Name:', fileName);\n\nreturn {\n  json: {\n    client_id: clientId,\n    agent_id: agentId,\n    document_url: documentUrl,\n    document_type: documentType,\n    file_name: fileName,\n    content: payload.content || null,\n    metadata: metadata\n  }\n};"
+      },
+      "name": "Validar Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [450, 300],
+      "id": "validar-payload"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.document_type}}",
+              "operation": "equals",
+              "value2": "url"
+            }
+          ]
+        }
+      },
+      "name": "Tipo: URL?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [650, 300],
+      "id": "check-url"
+    },
+    {
+      "parameters": {
+        "url": "={{$json.document_url}}",
+        "options": {}
+      },
+      "name": "Baixar URL",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [850, 200],
+      "id": "download-url"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extrair texto de HTML ou texto puro\nconst response = $input.item.json;\nconst contentType = response.headers?.['content-type'] || '';\n\nlet extractedText = '';\n\nif (contentType.includes('text/html')) {\n  // Remover tags HTML (simplificado)\n  extractedText = response.body.replace(/<[^>]*>/g, ' ');\n  extractedText = extractedText.replace(/\\s+/g, ' ').trim();\n} else {\n  // Texto puro\n  extractedText = response.body;\n}\n\nconsole.log('✅ Texto extraído:', extractedText.length, 'caracteres');\n\nreturn {\n  json: {\n    ...$('Validar Payload').first().json,\n    content: extractedText\n  }\n};"
+      },
+      "name": "Extrair Texto URL",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1050, 200],
+      "id": "extract-url-text"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Se não é URL, assume que content já vem no payload\nconst originalData = $('Validar Payload').first().json;\n\nif (!originalData.content) {\n  throw new Error('Content não fornecido para tipo não-URL');\n}\n\nreturn {\n  json: originalData\n};"
+      },
+      "name": "Usar Content Direto",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [850, 400],
+      "id": "use-direct-content"
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combinationMode": "mergeByPosition"
+      },
+      "name": "Merge Content",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 2,
+      "position": [1250, 300],
+      "id": "merge-content"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================================\n// CHUNKING STRATEGY\n// ============================================================================\n// Divide texto grande em chunks de ~500 tokens (~2000 caracteres)\n// Com overlap de 100 caracteres para manter contexto\n\nconst data = $input.item.json;\nconst content = data.content;\n\nconst CHUNK_SIZE = 2000; // ~500 tokens\nconst OVERLAP = 200;     // 50 tokens overlap\n\nconst chunks = [];\nlet startIndex = 0;\n\nwhile (startIndex < content.length) {\n  const endIndex = Math.min(startIndex + CHUNK_SIZE, content.length);\n  const chunk = content.substring(startIndex, endIndex);\n  \n  if (chunk.trim().length > 0) {\n    chunks.push(chunk.trim());\n  }\n  \n  // Próximo chunk com overlap\n  startIndex += (CHUNK_SIZE - OVERLAP);\n}\n\nconsole.log('📄 Total de chunks criados:', chunks.length);\nconsole.log('📊 Tamanho médio:', Math.round(content.length / chunks.length), 'caracteres');\n\n// Criar um item por chunk\nconst output = chunks.map((chunk, index) => ({\n  json: {\n    ...data,\n    chunk_content: chunk,\n    chunk_index: index,\n    total_chunks: chunks.length\n  }\n}));\n\nreturn output;"
+      },
+      "name": "Chunking",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1450, 300],
+      "id": "chunking"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/embeddings",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "openAiApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"text-embedding-ada-002\",\n  \"input\": \"{{ $json.chunk_content }}\"\n}",
+        "options": {}
+      },
+      "name": "Gerar Embedding",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1650, 300],
+      "id": "generate-embedding",
+      "credentials": {
+        "openAiApi": {
+          "id": "openai-credentials",
+          "name": "OpenAI Account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://vnlfgnfaortdvmraoapq.supabase.co/rest/v1/rpc/save_rag_document",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZubGZnbmZhb3J0ZHZtcmFvYXBxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjE3MTM1NDgsImV4cCI6MjA3NzI4OTU0OH0.Qu6ithTk2tNNG-SYQDN5BP15pb_xKufOQUhqAuwxT0U"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZubGZnbmZhb3J0ZHZtcmFvYXBxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjE3MTM1NDgsImV4cCI6MjA3NzI4OTU0OH0.Qu6ithTk2tNNG-SYQDN5BP15pb_xKufOQUhqAuwxT0U"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"p_client_id\": \"{{ $json.client_id }}\",\n  \"p_agent_id\": \"{{ $json.agent_id }}\",\n  \"p_content\": \"{{ $json.chunk_content }}\",\n  \"p_embedding\": {{ JSON.stringify($json.data[0].embedding) }},\n  \"p_metadata\": {{ JSON.stringify($json.metadata) }},\n  \"p_source_type\": \"{{ $json.document_type }}\",\n  \"p_source_id\": \"{{ $json.document_url }}\",\n  \"p_source_url\": \"{{ $json.document_url }}\",\n  \"p_file_name\": \"{{ $json.file_name }}\",\n  \"p_chunk_index\": {{ $json.chunk_index }},\n  \"p_total_chunks\": {{ $json.total_chunks }}\n}",
+        "options": {}
+      },
+      "name": "Salvar no Supabase",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1850, 300],
+      "id": "save-supabase"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Consolidar resultados\nconst allResults = $input.all();\n\nconst totalChunks = allResults.length;\nconst successCount = allResults.filter(r => r.json && !r.json.error).length;\nconst failCount = totalChunks - successCount;\n\nconsole.log('=== RAG INGESTION COMPLETO ===');\nconsole.log('Total chunks:', totalChunks);\nconsole.log('Sucesso:', successCount);\nconsole.log('Falhas:', failCount);\n\nreturn {\n  json: {\n    success: failCount === 0,\n    total_chunks: totalChunks,\n    success_count: successCount,\n    fail_count: failCount,\n    client_id: allResults[0].json.client_id,\n    agent_id: allResults[0].json.agent_id,\n    file_name: allResults[0].json.file_name\n  }\n};"
+      },
+      "name": "Resumo Final",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2050, 300],
+      "id": "summary"
+    }
+  ],
+  "connections": {
+    "Webhook Trigger": {
+      "main": [[{ "node": "Validar Payload", "type": "main", "index": 0 }]]
+    },
+    "Validar Payload": {
+      "main": [[{ "node": "Tipo: URL?", "type": "main", "index": 0 }]]
+    },
+    "Tipo: URL?": {
+      "main": [
+        [{ "node": "Baixar URL", "type": "main", "index": 0 }],
+        [{ "node": "Usar Content Direto", "type": "main", "index": 0 }]
+      ]
+    },
+    "Baixar URL": {
+      "main": [[{ "node": "Extrair Texto URL", "type": "main", "index": 0 }]]
+    },
+    "Extrair Texto URL": {
+      "main": [[{ "node": "Merge Content", "type": "main", "index": 0 }]]
+    },
+    "Usar Content Direto": {
+      "main": [[{ "node": "Merge Content", "type": "main", "index": 1 }]]
+    },
+    "Merge Content": {
+      "main": [[{ "node": "Chunking", "type": "main", "index": 0 }]]
+    },
+    "Chunking": {
+      "main": [[{ "node": "Gerar Embedding", "type": "main", "index": 0 }]]
+    },
+    "Gerar Embedding": {
+      "main": [[{ "node": "Salvar no Supabase", "type": "main", "index": 0 }]]
+    },
+    "Salvar no Supabase": {
+      "main": [[{ "node": "Resumo Final", "type": "main", "index": 0 }]]
+    }
+  }
+}
