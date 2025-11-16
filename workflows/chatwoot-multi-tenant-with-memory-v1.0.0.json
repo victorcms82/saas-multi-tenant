@@ -1,0 +1,42 @@
+{
+  "name": "Chatwoot Multi-Tenant with Memory v1.0.0",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "chatwoot-webhook",
+        "options": {}
+      },
+      "name": "Chatwoot Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        -720,
+        96
+      ],
+      "webhookId": "chatwoot-incoming",
+      "id": "456f9b26-fd1b-491b-bb10-0efbc59f239a"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Identifica cliente, agente e canal\nconst payload = $input.item.json;\n\n// Extrair informações do webhook Chatwoot\nconst conversationId = payload.body?.conversation?.id || payload.conversation?.id;\nconst contactId = payload.body?.sender?.id || payload.sender?.id;\n\n// Extrair message_body com fallbacks\nlet messageBody = \n  payload.content ||              // Webhook n8n (nivel raiz)\n  payload.body?.content ||        // Chatwoot direto\n  payload.body?.body?.content ||  // Chatwoot encapsulado\n  '';\n\n// Canal e attachments (MOVER PARA ANTES DA VALIDAÇÃO)\nconst channel = payload.inbox?.channel_type || payload.body?.inbox?.channel_type || 'whatsapp';\nconst attachments = payload.attachments || payload.body?.attachments || [];\n\n// VALIDAÇÃO: Abortar se message_body vazio E sem attachments\nif ((!messageBody || messageBody.trim() === '') && attachments.length === 0) {\n  console.error('❌ ERRO: message_body vazio E sem attachments. Payload keys:', Object.keys(payload));\n  throw new Error('Mensagem vazia sem anexos');\n}\n\n// Se só tem attachment sem texto, criar mensagem padrão\nif ((!messageBody || messageBody.trim() === '') && attachments.length > 0) {\n  messageBody = '[Arquivo enviado]';\n  console.log('📎 Attachment sem texto. Message_body definido como:', messageBody);\n}\n\n// Converter message_type de número para string\n// Chatwoot envia: 0=incoming, 1=outgoing, 2=activity\nlet messageType = payload.message_type || payload.body?.message_type || 'incoming';\nif (typeof messageType === 'number') {\n  messageType = messageType === 0 ? 'incoming' : messageType === 1 ? 'outgoing' : 'activity';\n}\n\nconst contentType = payload.content_type || payload.body?.content_type || 'text';\n\n// Extrair custom attributes\nconst customAttributes = payload.conversation?.custom_attributes || payload.body?.conversation?.custom_attributes || {};\nconst clientId = customAttributes.client_id || 'PENDING_LOCATION_DETECTION';\nconst agentId = customAttributes.agent_id || 'default';\n\nconst sender = payload.sender || payload.body?.sender || { type: 'contact' };\n\n// Extrair client_media_attachments (mídias do banco Supabase)\nconst clientMediaAttachments = payload.client_media_attachments || payload.body?.client_media_attachments || [];\n\nreturn {\n  json: {\n    client_id: clientId,\n    agent_id: agentId,\n    conversation_id: conversationId,\n    contact_id: contactId,\n    channel: channel,\n    message_body: messageBody,\n    message_type: messageType,\n    content_type: contentType,\n    attachments: attachments,\n    has_attachments: attachments.length > 0,\n    client_media_attachments: clientMediaAttachments,\n    sender: sender,\n    body: payload.body || payload,\n    timestamp: new Date().toISOString(),\n    original_payload: payload\n  }\n};"
+      },
+      "name": "Identificar Cliente e Agente",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -512,
+        96
+      ],
+      "id": "746e5fd8-2083-4b44-b765-fa0e8cae8ea9"
+    }
+  ],
+  "connections": {},
+  "meta": {
+    "instanceId": "569d30e41eb76a1ea495af04713ddcb7e6304e9943292f9d85d95af4c52eb47b",
+    "version": "1.0.0",
+    "templateCreatedBy": "GitHub Copilot",
+    "description": "Workflow completo com memória de conversação funcionando. Bot lembra contexto de mensagens anteriores.",
+    "created": "2025-11-12"
+  }
+}

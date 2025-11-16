@@ -26,7 +26,7 @@
 **Nome:** `OpenAI API`
 
 **Configuração:**
-- API Key: `sk-proj-XXXXXXXXXXXXXXX` (sua key da OpenAI)
+- API Key: `YOUR_OPENAI_API_KEY` (sua key da OpenAI)
 
 **Como obter:**
 1. https://platform.openai.com/api-keys

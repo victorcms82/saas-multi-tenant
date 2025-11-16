@@ -75,7 +75,7 @@ Organization ID: (opcional)
 2. **Name:** `OpenAI API`
 3. **Preencher:**
    ```
-   API Key: sk-proj-XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+   API Key: YOUR_OPENAI_API_KEY
    ```
 4. **Save**
 
