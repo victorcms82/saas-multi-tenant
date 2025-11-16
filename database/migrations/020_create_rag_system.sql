@@ -198,8 +198,7 @@ END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
 COMMENT ON FUNCTION query_rag_documents IS 
-  'Busca documentos similares usando vector search (cosine similarity). ' ||
-  'Retorna top K documentos acima do threshold de similaridade.';
+  'Busca documentos similares usando vector search (cosine similarity). Retorna top K documentos acima do threshold de similaridade.';
 
 -- ============================================================================
 -- PARTE 7: RPC Function - save_rag_document
@@ -278,8 +277,7 @@ END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
 COMMENT ON FUNCTION save_rag_document IS 
-  'Salva documento com embedding. Faz deduplicação por content_hash. ' ||
-  'Retorna UUID do documento (novo ou existente).';
+  'Salva documento com embedding. Faz deduplicação por content_hash. Retorna UUID do documento (novo ou existente).';
 
 -- ============================================================================
 -- PARTE 8: RPC Function - delete_rag_documents_by_source
@@ -308,8 +306,7 @@ END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
 COMMENT ON FUNCTION delete_rag_documents_by_source IS 
-  'Deleta todos os chunks de um documento específico. ' ||
-  'Útil para atualizar documento (delete + re-upload).';
+  'Deleta todos os chunks de um documento específico. Útil para atualizar documento (delete + re-upload).';
 
 -- ============================================================================
 -- PARTE 9: View para Estatísticas
