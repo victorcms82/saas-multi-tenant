@@ -1,0 +1,2118 @@
+{
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "chatwoot-webhook",
+        "options": {}
+      },
+      "name": "Chatwoot Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        -4944,
+        96
+      ],
+      "webhookId": "33569ce1-e844-49b8-af0d-620a6dc623a9",
+      "id": "1020e889-16d0-4f1f-a60e-f8dccb3c612f"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Identifica cliente, agente e canal\nconst payload = $input.item.json;\n\n// Extrair informações do webhook Chatwoot\nconst conversationId = payload.body?.conversation?.id || payload.conversation?.id;\nconst contactId = payload.body?.sender?.id || payload.sender?.id;\n\n// Extrair message_body com fallbacks\nlet messageBody = \n  payload.content ||              // Webhook n8n (nivel raiz)\n  payload.body?.content ||        // Chatwoot direto\n  payload.body?.body?.content ||  // Chatwoot encapsulado\n  '';\n\n// Canal e attachments (MOVER PARA ANTES DA VALIDAÇÃO)\nconst channel = payload.inbox?.channel_type || payload.body?.inbox?.channel_type || 'whatsapp';\nconst attachments = payload.attachments || payload.body?.attachments || [];\n\n// VALIDAÇÃO: Abortar se message_body vazio E sem attachments\nif ((!messageBody || messageBody.trim() === '') && attachments.length === 0) {\n  console.error('❌ ERRO: message_body vazio E sem attachments. Payload keys:', Object.keys(payload));\n  throw new Error('Mensagem vazia sem anexos');\n}\n\n// Se só tem attachment sem texto, criar mensagem padrão\nif ((!messageBody || messageBody.trim() === '') && attachments.length > 0) {\n  messageBody = '[Arquivo enviado]';\n  console.log('📎 Attachment sem texto. Message_body definido como:', messageBody);\n}\n\n// Converter message_type de número para string\n// Chatwoot envia: 0=incoming, 1=outgoing, 2=activity\nlet messageType = payload.message_type || payload.body?.message_type || 'incoming';\nif (typeof messageType === 'number') {\n  messageType = messageType === 0 ? 'incoming' : messageType === 1 ? 'outgoing' : 'activity';\n}\n\nconst contentType = payload.content_type || payload.body?.content_type || 'text';\n\n// Extrair custom attributes\nconst customAttributes = payload.conversation?.custom_attributes || payload.body?.conversation?.custom_attributes || {};\nconst clientId = customAttributes.client_id || 'PENDING_LOCATION_DETECTION';\nconst agentId = customAttributes.agent_id || 'default';\n\nconst sender = payload.sender || payload.body?.sender || { type: 'contact' };\n\n// Extrair client_media_attachments (mídias do banco Supabase)\nconst clientMediaAttachments = payload.client_media_attachments || payload.body?.client_media_attachments || [];\n\nreturn {\n  json: {\n    client_id: clientId,\n    agent_id: agentId,\n    conversation_id: conversationId,\n    contact_id: contactId,\n    channel: channel,\n    message_body: messageBody,\n    message_type: messageType,\n    content_type: contentType,\n    attachments: attachments,\n    has_attachments: attachments.length > 0,\n    client_media_attachments: clientMediaAttachments,\n    sender: sender,\n    body: payload.body || payload,\n    timestamp: new Date().toISOString(),\n    original_payload: payload\n  }\n};"
+      },
+      "name": "Identificar Cliente e Agente",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -4704,
+        96
+      ],
+      "id": "4587cfb5-7e7b-44a7-aa62-61666751d202"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "9c3e6f6e-2c4f-4d5e-8a2b-1f3e7d8c9b0a",
+              "leftValue": "={{ $json.message_type }}",
+              "rightValue": "incoming",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            },
+            {
+              "id": "a1b2c3d4-5e6f-7a8b-9c0d-1e2f3a4b5c6d",
+              "leftValue": "={{ $json.body?.sender?.type || $json.sender?.type || 'contact' }}",
+              "rightValue": "contact",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "name": "Filtrar Apenas Incoming",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -4496,
+        96
+      ],
+      "id": "647baca6-dba2-4ee9-950d-93e2f17eccc2"
+    },
+    {
+      "parameters": {
+        "url": "https://vnlfgnfaortdvmraoapq.supabase.co/rest/v1/agents",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "client_id",
+              "value": "=eq.{{$json.client_id}}"
+            },
+            {
+              "name": "agent_id",
+              "value": "=eq.{{$json.agent_id}}"
+            },
+            {
+              "name": "is_active",
+              "value": "=eq.true"
+            },
+            {
+              "name": "select",
+              "value": "*,client_subscriptions(*)"
+            },
+            {
+              "name": "limit",
+              "value": "1"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZubGZnbmZhb3J0ZHZtcmFvYXBxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjE3MTM1NDgsImV4cCI6MjA3NzI4OTU0OH0.Qu6ithTk2tNNG-SYQDN5BP15pb_xKufOQUhqAuwxT0U"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZubGZnbmZhb3J0ZHZtcmFvYXBxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjE3MTM1NDgsImV4cCI6MjA3NzI4OTU0OH0.Qu6ithTk2tNNG-SYQDN5BP15pb_xKufOQUhqAuwxT0U"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Buscar Dados do Agente (HTTP)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -1712,
+        -32
+      ],
+      "id": "2045da21-4f18-4c98-b072-ce06ed81993f",
+      "alwaysOutputData": true,
+      "credentials": {
+        "httpCustomAuth": {
+          "id": "NEn6NpNWjE7hCyWQ",
+          "name": "Supabase API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================================\n// FIX: Buscar message_body do Merge correto (com mídia processada)\n// ============================================================================\n\nconst item = $input.item.json;\n\n// 🔒 SEGURANÇA: client_id do location\nconst locationNode = $('💼 Construir Contexto Location + Staff1').first().json;\nconst webhookNode = $('Filtrar Apenas Incoming').first().json;\n\n// ✅ CORREÇÃO: Buscar message_body do Merge de mídias (que tem a descrição!)\nconst mergeNode = $('Merge').first().json;\n\nconst locationContext = locationNode.location_context || item.location_context || '';\nconst clientId = locationNode.client_id || item.client_id || webhookNode.client_id;\n\nconsole.log('=== DEBUG MESSAGE_BODY ===');\nconsole.log('mergeNode.message_body:', mergeNode.message_body);\nconsole.log('webhookNode.message_body:', webhookNode.message_body);\nconsole.log('item.message_body:', item.message_body);\n\nconst webhookData = {\n  client_id: clientId,\n  agent_id: webhookNode.agent_id || item.agent_id,\n  conversation_id: webhookNode.conversation_id || item.conversation_id,\n  contact_id: webhookNode.contact_id || item.contact_id,\n  channel: webhookNode.channel || item.channel,\n  message_body: mergeNode.message_body || webhookNode.message_body, // ← CORREÇÃO!\n  message_type: webhookNode.message_type || item.message_type,\n  content_type: webhookNode.content_type || item.content_type,\n  attachments: webhookNode.attachments || item.attachments || [],\n  has_attachments: webhookNode.has_attachments || item.has_attachments || false,\n  client_media_attachments: webhookNode.client_media_attachments || item.client_media_attachments || [],\n  timestamp: webhookNode.timestamp || item.timestamp\n};\n\n// VALIDAÇÃO\nif (!webhookData.message_body || webhookData.message_body.trim() === '') {\n  console.error('❌ ERRO: message_body vazio!');\n  throw new Error('message_body perdido no fluxo!');\n}\n\nconsole.log('✅ message_body preservado:', webhookData.message_body.substring(0, 100) + '...');\n\nconst agentData = item;\n\n// Verificar mídia do acervo\nlet mediaRules = [];\nif (item.rule_id && item.media_id) {\n  mediaRules = [{\n    rule_id: item.rule_id,\n    media_id: item.media_id,\n    trigger_type: item.trigger_type,\n    trigger_value: item.trigger_value,\n    file_url: item.file_url,\n    file_type: item.file_type,\n    file_name: item.file_name,\n    mime_type: item.mime_type,\n    title: item.title,\n    description: item.description\n  }];\n}\n\n// Preparar mídia do acervo\nlet mediaContext = '';\nlet clientMediaAttachments = webhookData.client_media_attachments || [];\nlet mediaLogEntries = [];\n\nif (Array.isArray(mediaRules) && mediaRules.length > 0) {\n  mediaContext = '\\n\\n--- MÍDIA DISPONÍVEL PARA ENVIO ---\\n';\n  \n  mediaRules.forEach((media, i) => {\n    mediaContext += `${i+1}. ${media.title || media.file_name} (${media.file_type})\\n`;\n    mediaContext += `   Descrição: ${media.description || 'N/A'}\\n`;\n    mediaContext += `   Disparado por: ${media.trigger_type} - \"${media.trigger_value}\"\\n\\n`;\n    \n    clientMediaAttachments.push({\n      file_url: media.file_url,\n      file_type: media.file_type,\n      file_name: media.file_name,\n      caption: media.title || media.description || ''\n    });\n    \n    mediaLogEntries.push({\n      rule_id: media.rule_id,\n      media_id: media.media_id,\n      triggered_by: media.trigger_type,\n      trigger_value: media.trigger_value\n    });\n  });\n  \n  mediaContext += '\\n🚨 INSTRUÇÃO OBRIGATÓRIA: Você DEVE informar ao usuário que está enviando o arquivo anexo mencionado acima!';\n}\n\nreturn {\n  json: {\n    // Dados do webhook\n    client_id: webhookData.client_id,\n    agent_id: webhookData.agent_id,\n    conversation_id: webhookData.conversation_id,\n    contact_id: webhookData.contact_id,\n    channel: webhookData.channel,\n    message_body: webhookData.message_body, // ← COM DESCRIÇÃO DA IMAGEM!\n    message_type: webhookData.message_type,\n    content_type: webhookData.content_type,\n    attachments: webhookData.attachments,\n    has_attachments: webhookData.has_attachments,\n    timestamp: webhookData.timestamp,\n    \n    // Dados do agente\n    system_prompt: agentData.system_prompt || 'Você é um assistente útil.',\n    llm_provider: agentData.llm_provider || 'openai',\n    llm_model: agentData.llm_model,\n    llm_api_key: agentData.llm_api_key || null,\n    tools_enabled: agentData.tools_enabled || [],\n    rag_namespace: agentData.rag_namespace,\n    \n    // Contextos\n    location_context: locationContext,\n    has_location_data: locationContext ? true : false,\n    media_context: mediaContext,\n    client_media_attachments: clientMediaAttachments,\n    media_log_entries: mediaLogEntries,\n    has_client_media: clientMediaAttachments.length > 0,\n    \n    // Subscription\n    subscription: agentData.client_subscriptions?.[0] || {}\n  }\n};"
+      },
+      "name": "Construir Contexto Completo",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        16,
+        96
+      ],
+      "id": "7c12e321-1628-4bef-9f05-daad8de05de0",
+      "notes": "🔒 SEGURANÇA: client_id autenticado\nBusca client_id do node \"💼 Construir Contexto Location\",\nnão do merge (que pode estar embaralhado).\nGarante isolamento multi-tenant."
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================================\r\n// NODE: Query RAG (Namespace Isolado) - IMPLEMENTAÇÃO REAL\r\n// ============================================================================\r\n// Descrição: Busca documentos similares usando vector search no Supabase\r\n// Substitui: Placeholder que retornava array vazio\r\n// Data: 16/11/2025\r\n// ============================================================================\r\n\r\nconst data = $input.item.json;\r\n\r\n// Extrair dados necessários\r\nconst clientId = data.client_id;\r\nconst agentId = data.agent_id || 'default';\r\nconst messageBody = data.message_body || '';\r\nconst openaiApiKey = data.llm_api_key || process.env.OPENAI_API_KEY;\r\n\r\nconsole.log('=== QUERY RAG INICIADO ===');\r\nconsole.log('Client ID:', clientId);\r\nconsole.log('Agent ID:', agentId);\r\nconsole.log('Query:', messageBody.substring(0, 100) + '...');\r\n\r\n// Validações\r\nif (!clientId || !agentId) {\r\n  console.error('❌ ERRO: client_id ou agent_id ausente!');\r\n  return {\r\n    json: {\r\n      ...data,\r\n      rag_results: [],\r\n      rag_context: '',\r\n      rag_error: 'client_id ou agent_id ausente'\r\n    }\r\n  };\r\n}\r\n\r\nif (!messageBody || messageBody.trim() === '') {\r\n  console.log('⚠️ Mensagem vazia, pulando RAG');\r\n  return {\r\n    json: {\r\n      ...data,\r\n      rag_results: [],\r\n      rag_context: ''\r\n    }\r\n  };\r\n}\r\n\r\ntry {\r\n  // ============================================================================\r\n  // PASSO 1: Gerar Embedding da Pergunta do Usuário\r\n  // ============================================================================\r\n  \r\n  console.log('🔄 Gerando embedding da query...');\r\n  \r\n  const embeddingResponse = await fetch('https://api.openai.com/v1/embeddings', {\r\n    method: 'POST',\r\n    headers: {\r\n      'Authorization': `Bearer ${openaiApiKey}`,\r\n      'Content-Type': 'application/json'\r\n    },\r\n    body: JSON.stringify({\r\n      model: 'text-embedding-ada-002',\r\n      input: messageBody\r\n    })\r\n  });\r\n  \r\n  if (!embeddingResponse.ok) {\r\n    const errorText = await embeddingResponse.text();\r\n    console.error('❌ Erro ao gerar embedding:', errorText);\r\n    throw new Error(`OpenAI Embeddings falhou: ${embeddingResponse.status}`);\r\n  }\r\n  \r\n  const embeddingData = await embeddingResponse.json();\r\n  const queryEmbedding = embeddingData.data[0].embedding;\r\n  \r\n  console.log('✅ Embedding gerado:', queryEmbedding.length, 'dimensões');\r\n  console.log('💰 Custo embedding: ~$0.00001');\r\n  \r\n  // ============================================================================\r\n  // PASSO 2: Buscar Documentos Similares no Supabase\r\n  // ============================================================================\r\n  \r\n  console.log('🔍 Buscando documentos similares no Supabase...');\r\n  \r\n  const supabaseUrl = 'https://vnlfgnfaortdvmraoapq.supabase.co';\r\n  const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZubGZnbmZhb3J0ZHZtcmFvYXBxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjE3MTM1NDgsImV4cCI6MjA3NzI4OTU0OH0.Qu6ithTk2tNNG-SYQDN5BP15pb_xKufOQUhqAuwxT0U';\r\n  \r\n  const ragResponse = await fetch(`${supabaseUrl}/rest/v1/rpc/query_rag_documents`, {\r\n    method: 'POST',\r\n    headers: {\r\n      'apikey': supabaseKey,\r\n      'Authorization': `Bearer ${supabaseKey}`,\r\n      'Content-Type': 'application/json',\r\n      'Prefer': 'return=representation'\r\n    },\r\n    body: JSON.stringify({\r\n      p_client_id: clientId,\r\n      p_agent_id: agentId,\r\n      p_query_embedding: queryEmbedding,\r\n      p_limit: 5,           // Top 5 documentos\r\n      p_threshold: 0.7      // Similaridade mínima 70%\r\n    })\r\n  });\r\n  \r\n  if (!ragResponse.ok) {\r\n    const errorText = await ragResponse.text();\r\n    console.error('❌ Erro ao buscar RAG:', errorText);\r\n    \r\n    // Se tabela não existe ainda, retornar vazio (não é erro crítico)\r\n    if (errorText.includes('relation \"rag_documents\" does not exist')) {\r\n      console.warn('⚠️ Tabela rag_documents ainda não foi criada. Execute migration 020.');\r\n      return {\r\n        json: {\r\n          ...data,\r\n          rag_results: [],\r\n          rag_context: '',\r\n          rag_warning: 'RAG não configurado (tabela não existe)'\r\n        }\r\n      };\r\n    }\r\n    \r\n    throw new Error(`Supabase RAG falhou: ${ragResponse.status}`);\r\n  }\r\n  \r\n  const ragResults = await ragResponse.json();\r\n  \r\n  console.log('📊 Documentos encontrados:', ragResults.length);\r\n  \r\n  // ============================================================================\r\n  // PASSO 3: Formatar Contexto para o LLM\r\n  // ============================================================================\r\n  \r\n  let ragContext = '';\r\n  \r\n  if (ragResults.length > 0) {\r\n    console.log('✅ RAG ativo! Formatando contexto...');\r\n    \r\n    ragContext = '\\n\\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\\n';\r\n    ragContext += '📚 INFORMAÇÕES DA BASE DE CONHECIMENTO\\n';\r\n    ragContext += '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\\n\\n';\r\n    \r\n    ragResults.forEach((doc, index) => {\r\n      const similarity = (doc.similarity * 100).toFixed(0);\r\n      const source = doc.file_name || doc.source_type || 'documento';\r\n      \r\n      ragContext += `${index + 1}. [${source}] (relevância: ${similarity}%)\\n`;\r\n      ragContext += `${doc.content}\\n\\n`;\r\n      \r\n      // Adicionar metadados se existir\r\n      if (doc.metadata && Object.keys(doc.metadata).length > 0) {\r\n        ragContext += `   📎 Tags: ${doc.metadata.tags ? doc.metadata.tags.join(', ') : 'N/A'}\\n\\n`;\r\n      }\r\n      \r\n      console.log(`   • Doc ${index + 1}: ${similarity}% similar - \"${doc.content.substring(0, 50)}...\"`);\r\n    });\r\n    \r\n    ragContext += '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\\n';\r\n    ragContext += '💡 IMPORTANTE: Use as informações acima para responder com precisão. ';\r\n    ragContext += 'Se a resposta estiver no contexto, cite a fonte.\\n';\r\n    ragContext += '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\\n';\r\n    \r\n    console.log('✅ Contexto RAG formatado:', ragContext.length, 'caracteres');\r\n  } else {\r\n    console.log('ℹ️ Nenhum documento relevante encontrado (similaridade < 70%)');\r\n    ragContext = '';\r\n  }\r\n  \r\n  // ============================================================================\r\n  // PASSO 4: Retornar Dados Enriquecidos\r\n  // ============================================================================\r\n  \r\n  return {\r\n    json: {\r\n      ...data,\r\n      rag_results: ragResults,\r\n      rag_context: ragContext,\r\n      rag_found: ragResults.length > 0,\r\n      rag_count: ragResults.length,\r\n      rag_query_embedding: queryEmbedding, // Salvar para cache futuro\r\n      rag_executed: true\r\n    }\r\n  };\r\n  \r\n} catch (error) {\r\n  console.error('❌ ERRO no Query RAG:', error.message);\r\n  console.error('Stack:', error.stack);\r\n  \r\n  // Retornar sem RAG (não bloquear o fluxo)\r\n  return {\r\n    json: {\r\n      ...data,\r\n      rag_results: [],\r\n      rag_context: '',\r\n      rag_error: error.message,\r\n      rag_executed: false\r\n    }\r\n  };\r\n}\r\n"
+      },
+      "name": "Query RAG (Namespace Isolado)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        304,
+        96
+      ],
+      "id": "c260fde1-6f70-4e36-a13a-ec1581df81f2"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================================\n// PREPARAR PROMPT LLM COM CONTEXTO NLP\n// ============================================================================\n\nlet systemPrompt = $input.item.json.system_prompt;\nconst messageBody = $input.item.json.message_body;\nconst ragContext = $input.item.json.rag_context || '';\nconst mediaContext = $input.item.json.media_context || '';\nconst conversationHistory = $input.item.json.conversation_history || '';\n\n// ✨ NOVO: Contexto NLP para humanização\nconst nlpAnalysis = $input.item.json.nlp_analysis || {};\n\nif ($input.item.json.nlp_processed) {\n  const nlpContext = `\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n📊 ANÁLISE DA MENSAGEM (use para personalizar sua resposta)\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n🎯 Intenção: ${nlpAnalysis.intent}\n📈 Confiança: ${(nlpAnalysis.confidence * 100).toFixed(0)}%\n😊 Sentimento: ${nlpAnalysis.sentiment}\n⚡ Urgência: ${nlpAnalysis.urgency}\n\n🔍 Entidades detectadas:\n${JSON.stringify(nlpAnalysis.entities || {}, null, 2)}\n\n📌 INSTRUÇÕES DE PERSONALIZAÇÃO:\n${nlpAnalysis.sentiment === 'negativo' ? '- Cliente está insatisfeito: seja EXTRA empático, peça desculpas se apropriado, mostre que você se importa' : ''}\n${nlpAnalysis.sentiment === 'positivo' ? '- Cliente está satisfeito: mantenha o tom positivo, agradeça' : ''}\n${nlpAnalysis.urgency === 'alta' ? '- URGENTE: seja objetivo e ágil, foque em resolver rapidamente' : ''}\n${nlpAnalysis.intent === 'reclamacao' ? '- É uma RECLAMAÇÃO: valide os sentimentos, mostre empatia, ofereça solução concreta' : ''}\n${nlpAnalysis.intent === 'elogio' ? '- É um ELOGIO: agradeça genuinamente, reforce o bom atendimento' : ''}\n${Object.keys(nlpAnalysis.entities || {}).length > 0 ? '- CONFIRME as entidades detectadas com o usuário antes de prosseguir' : ''}\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;\n  \n  systemPrompt += nlpContext;\n}\n\n// CRÍTICO: Se há mídia disponível, injetar instrução no SYSTEM PROMPT\nif (mediaContext && mediaContext.includes('MÍDIA DISPONÍVEL')) {\n  systemPrompt += '\\n\\n--- INSTRUÇÃO CRÍTICA SOBRE MÍDIA ---\\n';\n  systemPrompt += 'Se houver arquivos de mídia disponíveis mencionados no contexto do usuário, você DEVE informar que está enviando esses arquivos como anexo. Não ignore esta instrução!';\n}\n\n// MONTAR USER PROMPT (sem system_prompt, para evitar duplicação)\nconst userPrompt = \n  (ragContext ? '\\n\\n--- CONTEXTO DO RAG ---\\n' + ragContext : '') +\n  mediaContext +\n  conversationHistory +\n  '\\n\\n--- MENSAGEM ATUAL DO USUÁRIO ---\\n' + messageBody;\n\nreturn {\n  json: {\n    ...($input.item.json),\n    system_prompt: systemPrompt,\n    user_prompt: userPrompt\n  }\n};\n"
+      },
+      "name": "Preparar Prompt LLM",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2416,
+        96
+      ],
+      "id": "ad90b985-e853-4435-9dd1-823faa1084c2"
+    },
+    {
+      "parameters": {
+        "resource": "chat",
+        "model": "={{ $json.llm_model || 'gpt-4o-mini' }}",
+        "prompt": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "={{ $json.system_prompt }}"
+            },
+            {
+              "content": "={{ $json.user_prompt }}"
+            }
+          ]
+        },
+        "options": {
+          "maxTokens": 1000,
+          "temperature": 0.7
+        },
+        "requestOptions": {}
+      },
+      "name": "LLM (GPT-4o-mini + Tools)",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [
+        2704,
+        96
+      ],
+      "id": "a1afe158-7a54-400f-98c8-3576c8054e32",
+      "credentials": {
+        "openAiApi": {
+          "id": "AZOIk8m4dEU8S2FP",
+          "name": "OpenAi account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Preservar todos os dados do contexto + adicionar resposta do LLM\nconst llmResponse = $input.item.json;\nconst previousData = $('Preparar Prompt LLM').first().json;\n\n// Corrigir estrutura: OpenAI retorna array diretamente\nconst choices = Array.isArray(llmResponse) ? llmResponse : [llmResponse];\n\nreturn {\n  json: {\n    ...previousData,\n    choices: choices\n  }\n};"
+      },
+      "name": "Preservar Contexto Após LLM",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2976,
+        96
+      ],
+      "id": "996f0b5a-566d-424f-b7c9-bb9ab2f46aa3"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.choices?.[0]?.finish_reason}}",
+              "value2": "tool_calls"
+            }
+          ]
+        }
+      },
+      "name": "Chamou Tool?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        3184,
+        96
+      ],
+      "id": "45e27b9e-6362-4fde-abbe-4251958a9fa8"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Executar tool calls (Calendar, Sheets, CRM)\nconst toolCalls = $input.item.json.choices?.[0]?.message?.tool_calls || [];\nconst results = [];\n\nfor (const call of toolCalls) {\n  const functionName = call.function.name;\n  const args = JSON.parse(call.function.arguments);\n  \n  // TODO: Implementar chamadas reais às APIs\n  if (functionName === 'create_calendar_event') {\n    results.push({\n      tool: 'calendar',\n      result: `Evento \"${args.title}\" criado para ${args.date}`\n    });\n  } else if (functionName === 'update_sheet') {\n    results.push({\n      tool: 'sheets',\n      result: `Planilha ${args.sheet_id} atualizada`\n    });\n  }\n}\n\nreturn {\n  json: {\n    ...($input.item.json),\n    tool_results: results\n  }\n};"
+      },
+      "name": "Executar Tools",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3376,
+        -16
+      ],
+      "id": "9c31e578-79b4-4492-8fd5-109c4a560e28"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extrair resposta final do LLM e preservar TODOS os dados do contexto\nconst item = $input.item.json;\n\nlet llmResponse = null;\n\n// Forma 1: choices array (formato OpenAI)\nif (item.choices && item.choices.length > 0) {\n  llmResponse = item.choices[0]?.message?.content;\n}\n\n// Forma 2: Buscar do node anterior se choices não existe\nif (!llmResponse) {\n  const llmNode = $('Preservar Contexto Após LLM').first().json;\n  llmResponse = llmNode.choices?.[0]?.message?.content;\n}\n\n// Fallback\nif (!llmResponse) {\n  llmResponse = 'Desculpe, não consegui processar sua mensagem.';\n  console.error('❌ ERRO: Não consegui extrair resposta do LLM');\n}\n\nconst toolResults = item.tool_results || [];\nlet finalResponse = llmResponse;\n\nif (toolResults.length > 0) {\n  finalResponse += '\\n\\n' + toolResults.map(r => r.result).join('\\n');\n}\n\nreturn {\n  json: {\n    ...item,\n    final_response: finalResponse,\n    response_type: 'text',\n    tool_results: toolResults\n  }\n};"
+      },
+      "name": "Construir Resposta Final",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3568,
+        96
+      ],
+      "id": "4ed5a626-4976-4f34-acad-204443de9363"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.has_client_media }}",
+              "value2": "true"
+            }
+          ]
+        }
+      },
+      "name": "Tem Mídia do Acervo?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        4592,
+        96
+      ],
+      "id": "322b58d3-05c9-4aba-956e-f4c4eb1ff59b"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://vnlfgnfaortdvmraoapq.supabase.co/rest/v1/media_send_log",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZubGZnbmZhb3J0ZHZtcmFvYXBxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjE3MTM1NDgsImV4cCI6MjA3NzI4OTU0OH0.Qu6ithTk2tNNG-SYQDN5BP15pb_xKufOQUhqAuwxT0U"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZubGZnbmZhb3J0ZHZtcmFvYXBxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjE3MTM1NDgsImV4cCI6MjA3NzI4OTU0OH0.Qu6ithTk2tNNG-SYQDN5BP15pb_xKufOQUhqAuwxT0U"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=representation"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json.media_log_entries }}",
+        "options": {
+          "batching": {
+            "batch": {}
+          },
+          "response": {
+            "response": {}
+          },
+          "pagination": {
+            "pagination": {
+              "parameters": {
+                "parameters": [
+                  {}
+                ]
+              }
+            }
+          }
+        }
+      },
+      "name": "Registrar Log de Envio (HTTP)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        4864,
+        -32
+      ],
+      "id": "5bef5dc6-625a-4d7d-b261-956e1aaebd46",
+      "credentials": {
+        "httpCustomAuth": {
+          "id": "NEn6NpNWjE7hCyWQ",
+          "name": "Supabase API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Preservar dados originais após HTTP Request\nconst originalData = $('Construir Resposta Final').first().json;\nconst logResponse = $input.item.json;\n\nreturn {\n  json: {\n    ...originalData,\n    media_log_response: logResponse\n  }\n};"
+      },
+      "name": "Preservar Dados Após Log",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        5088,
+        -32
+      ],
+      "id": "247e78ce-afe6-4bbc-a6e5-1b7301dcff4b"
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "https://vnlfgnfaortdvmraoapq.supabase.co/rest/v1/client_subscriptions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "client_id",
+              "value": "=eq.{{$json.client_id}}"
+            },
+            {
+              "name": "agent_id",
+              "value": "=eq.{{$json.agent_id}}"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZubGZnbmZhb3J0ZHZtcmFvYXBxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjE3MTM1NDgsImV4cCI6MjA3NzI4OTU0OH0.Qu6ithTk2tNNG-SYQDN5BP15pb_xKufOQUhqAuwxT0U"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZubGZnbmZhb3J0ZHZtcmFvYXBxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjE3MTM1NDgsImV4cCI6MjA3NzI4OTU0OH0.Qu6ithTk2tNNG-SYQDN5BP15pb_xKufOQUhqAuwxT0U"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=representation"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"updated_at\": \"{{$now}}\"\n}",
+        "options": {}
+      },
+      "name": "Atualizar Usage Tracking (HTTP)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        5392,
+        112
+      ],
+      "id": "556705bd-e5dd-46fa-9b4c-7fa82a5d1185",
+      "alwaysOutputData": true,
+      "credentials": {
+        "httpCustomAuth": {
+          "id": "NEn6NpNWjE7hCyWQ",
+          "name": "Supabase API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Preservar dados originais após Usage Tracking\nconst originalData = $('Construir Resposta Final').first().json;\nconst usageResponse = $input.item.json;\n\nreturn {\n  json: {\n    ...originalData,\n    subscription: usageResponse[0] || usageResponse\n  }\n};"
+      },
+      "name": "Preservar Dados Após Usage Tracking",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        5664,
+        112
+      ],
+      "id": "2380a7a5-2678-4fe6-819a-32a6dd009046"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://chatwoot.evolutedigital.com.br/api/v1/accounts/1/conversations/{{ $json.conversation_id }}/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "api_access_token",
+              "value": "zL8FNtrajZjGv4LP9BrZiCif"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "content",
+              "value": "={{ $json.final_response }}"
+            },
+            {
+              "name": "message_type",
+              "value": "outgoing"
+            },
+            {
+              "name": "private",
+              "value": false
+            }
+          ]
+        },
+        "options": {
+          "redirect": {
+            "redirect": {}
+          },
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        }
+      },
+      "name": "Enviar Resposta via Chatwoot",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        5920,
+        112
+      ],
+      "id": "a263d808-fcb0-4c1e-93f7-261bc6bd317d",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "6zb8BvpL6QTY95dP",
+          "name": "Chatwoot Header Auth"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// Log de resposta do Chatwoot\nconst chatwootResponse = $input.item.json;\n\nconsole.log('=== CHATWOOT RESPONSE DEBUG ===');\nconsole.log('Status Code:', chatwootResponse.statusCode);\nconsole.log('Status Message:', chatwootResponse.statusMessage);\nconsole.log('Body:', JSON.stringify(chatwootResponse.body, null, 2));\n\nif (chatwootResponse.statusCode >= 400) {\n  console.error('❌ ERRO ao enviar para Chatwoot!');\n  console.error('Erro:', chatwootResponse.body);\n  \n  // 404 = conversation_id não existe (é ID de teste)\n  if (chatwootResponse.statusCode === 404) {\n    console.warn('⚠️  conversation_id não existe no Chatwoot (provavelmente ID de teste 99999)');\n    console.warn('✅ Workflow continuará normalmente. Mídia e dados foram processados com sucesso!');\n  }\n}\n\n// Preservar dados originais para próximo node\nconst originalData = $('Preservar Dados Após Usage Tracking').first().json;\n\nconsole.log('=== DEBUG PRESERVAÇÃO DE DADOS ===');\nconsole.log('client_media_attachments preservado?', originalData.client_media_attachments);\nconsole.log('client_media_attachments.length:', (originalData.client_media_attachments || []).length);\n\nreturn {\n  json: {\n    ...originalData,\n    chatwoot_status: chatwootResponse.statusCode,\n    chatwoot_sent: chatwootResponse.statusCode >= 200 && chatwootResponse.statusCode < 300,\n    chatwoot_error: chatwootResponse.statusCode >= 400 ? chatwootResponse.body : null\n  }\n};"
+      },
+      "name": "Log Chatwoot Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        6192,
+        112
+      ],
+      "id": "cc708d16-836c-4086-84bc-72629f5eb426"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "attachment-check",
+              "leftValue": "={{ ($json.client_media_attachments || []).length }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "name": "Tem Anexos?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        6480,
+        112
+      ],
+      "id": "fb55016a-5e4c-4a8d-bd39-416b6b9d6777"
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.client_media_attachments[0].file_url }}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "file"
+            }
+          }
+        }
+      },
+      "name": "Download Arquivo do Supabase",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        6752,
+        96
+      ],
+      "id": "d8cc8cc9-3523-41cc-8162-7efce9b6f2b7"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://chatwoot.evolutedigital.com.br/api/v1/accounts/1/conversations/{{ $json.conversation_id }}/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "api_access_token",
+              "value": "zL8FNtrajZjGv4LP9BrZiCif"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "content",
+              "value": "={{ $json.client_media_attachments[0].caption || 'Segue o arquivo solicitado' }}"
+            },
+            {
+              "name": "message_type",
+              "value": "outgoing"
+            },
+            {
+              "name": "private",
+              "value": "false"
+            },
+            {
+              "parameterType": "formBinaryData",
+              "name": "attachments[]",
+              "inputDataFieldName": "data"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true
+            }
+          }
+        }
+      },
+      "name": "Upload Anexo para Chatwoot",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        7024,
+        96
+      ],
+      "id": "a314aa34-1db7-43ff-a008-feb41681d88f"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Log resultado do upload\nconst uploadResponse = $input.item.json;\nconst originalData = $('Log Chatwoot Response').first().json;\n\nconsole.log('=== UPLOAD ANEXO DEBUG ===');\nconsole.log('Upload Response (completo):', JSON.stringify(uploadResponse, null, 2));\nconsole.log('Status Code:', uploadResponse.statusCode);\nconsole.log('Status Message:', uploadResponse.statusMessage);\nconsole.log('Body:', JSON.stringify(uploadResponse.body, null, 2));\nconsole.log('Headers:', JSON.stringify(uploadResponse.headers, null, 2));\n\nif (uploadResponse.statusCode >= 200 && uploadResponse.statusCode < 300) {\n  console.log('✅ Anexo enviado com sucesso!');\n} else {\n  console.error('❌ Erro ao enviar anexo');\n  console.error('Erro detalhado:', uploadResponse.body);\n}\n\nreturn {\n  json: {\n    ...originalData,\n    attachment_upload_status: uploadResponse.statusCode,\n    attachment_upload_body: uploadResponse.body,\n    attachment_sent: uploadResponse.statusCode >= 200 && uploadResponse.statusCode < 300\n  }\n};"
+      },
+      "name": "Log Upload Resultado",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        7296,
+        96
+      ],
+      "id": "df0638a2-306e-4496-b0fc-1d212c889d5e"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Log de erro detalhado\nconst error = $input.item.json.error || {};\nconst clientId = $input.item.json.client_id;\nconst agentId = $input.item.json.agent_id;\n\nconsole.error('ERRO NO WORKFLOW:', {\n  client_id: clientId,\n  agent_id: agentId,\n  error_message: error.message,\n  error_stack: error.stack,\n  timestamp: new Date().toISOString()\n});\n\nreturn {\n  json: {\n    ...($input.item.json),\n    final_response: 'Desculpe, ocorreu um erro temporário. Nossa equipe já foi notificada. Por favor, tente novamente em alguns instantes.',\n    is_error: true\n  }\n};"
+      },
+      "name": "Error Handler",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        6064,
+        304
+      ],
+      "id": "296846a7-a6b0-40b4-96e1-f6ccf5452449"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://vnlfgnfaortdvmraoapq.supabase.co/rest/v1/rpc/check_media_triggers",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZubGZnbmZhb3J0ZHZtcmFvYXBxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjE3MTM1NDgsImV4cCI6MjA3NzI4OTU0OH0.Qu6ithTk2tNNG-SYQDN5BP15pb_xKufOQUhqAuwxT0U"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZubGZnbmZhb3J0ZHZtcmFvYXBxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjE3MTM1NDgsImV4cCI6MjA3NzI4OTU0OH0.Qu6ithTk2tNNG-SYQDN5BP15pb_xKufOQUhqAuwxT0U"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=representation"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "p_client_id",
+              "value": "={{ $json.client_id }}"
+            },
+            {
+              "name": "p_agent_id",
+              "value": "={{ $json.agent_id }}"
+            },
+            {
+              "name": "p_message",
+              "value": "={{ $json.message_body }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        -1968,
+        176
+      ],
+      "id": "a9322b6f-32e5-4e12-8a0a-12b3edbb6af2",
+      "name": "Buscar Mídia Triggers (RPC)",
+      "alwaysOutputData": true,
+      "credentials": {
+        "httpCustomAuth": {
+          "id": "NEn6NpNWjE7hCyWQ",
+          "name": "Supabase API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        -1440,
+        80
+      ],
+      "id": "e14931ef-f81b-4bfe-9861-70dafdc39e91",
+      "name": "Merge: Agente + Mídia"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://vnlfgnfaortdvmraoapq.supabase.co/rest/v1/rpc/get_location_staff_summary",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZubGZnbmZhb3J0ZHZtcmFvYXBxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjE3MTM1NDgsImV4cCI6MjA3NzI4OTU0OH0.Qu6ithTk2tNNG-SYQDN5BP15pb_xKufOQUhqAuwxT0U"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZubGZnbmZhb3J0ZHZtcmFvYXBxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjE3MTM1NDgsImV4cCI6MjA3NzI4OTU0OH0.Qu6ithTk2tNNG-SYQDN5BP15pb_xKufOQUhqAuwxT0U"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"p_inbox_id\": {{ $json.original_payload.body.inbox.id || $json.original_payload.inbox.id }}\n}",
+        "options": {}
+      },
+      "name": "🏢 Detectar Localização e Staff (RPC)1",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -2192,
+        -32
+      ],
+      "id": "dfccddce-bb12-4816-9c2d-4139ba28da13",
+      "credentials": {
+        "httpCustomAuth": {
+          "id": "NEn6NpNWjE7hCyWQ",
+          "name": "Supabase API"
+        }
+      },
+      "notes": "🔒 SEGURANÇA: Este node busca client_id baseado no inbox_id do Chatwoot.\n\nPrevine:\n- Spoofing de client_id via webhook\n- Acesso cruzado entre tenants\n- Vazamento de dados entre clientes\n\nO inbox_id vem do Chatwoot (confiável), não do usuário."
+    },
+    {
+      "parameters": {
+        "jsCode": "// 🔒 SEGURANÇA: Injetar client_id correto baseado no banco de dados\n// Este código SOBRESCREVE qualquer client_id que venha do webhook\nconst webhookData = $('Identificar Cliente e Agente').first().json;\nconst locationData = $input.first().json;\n\n// VALIDAÇÃO: Verificar se RPC retornou dados\nif (!locationData || locationData.length === 0) {\n  console.warn('⚠️ ATENÇÃO: get_location_staff_summary não retornou dados.');\n  console.warn('Possíveis causas:');\n  console.warn('1. inbox_id não está vinculado a nenhuma location na tabela locations');\n  console.warn('2. location está com is_active = FALSE');\n  console.warn('3. inbox_id não foi passado corretamente');\n  \n  // ⚠️ IMPORTANTE: NÃO sobrescreve client_id se não houver location\n  // Deixa o workflow continuar com os dados originais (pode ser tenant sem multi-location)\n  return {\n    json: {\n      ...webhookData,\n      location_context: '',\n      has_location_data: false,\n      location_error: 'No location found for this inbox_id'\n    }\n  };\n}\n\n// Extrair primeiro resultado (sempre retorna array com 1 item)\nconst location = locationData[0] || locationData;\n\nconsole.log('✅ Localização detectada:', location.location_name);\nconsole.log('🔒 client_id autenticado:', location.client_id);\nconsole.log('📊 Total de profissionais:', location.total_staff);\nconsole.log('✅ Disponíveis online:', location.staff_available_online);\n\n// Construir contexto formatado para o LLM\nconst locationContext = `\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n🏢 INFORMAÇÕES DA UNIDADE\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\nNome: ${location.location_name}\nTipo: ${location.location_type}\nEndereço: ${location.address}, ${location.city}\nTelefone: ${location.phone}\nWhatsApp: ${location.whatsapp_number}\n\nHorário de Funcionamento:\n${formatWorkingHours(location.working_hours)}\n\nServiços Oferecidos:\n${formatServices(location.services_offered)}\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n👥 PROFISSIONAIS DISPONÍVEIS (${location.staff_available_online}/${location.total_staff})\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n${formatStaffList(location.staff_list)}\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;\n\n// Funções auxiliares de formatação\nfunction formatWorkingHours(hours) {\n  if (!hours || hours.length === 0) return 'Não informado';\n  \n  const dayNames = {\n    monday: 'Segunda',\n    tuesday: 'Terça',\n    wednesday: 'Quarta',\n    thursday: 'Quinta',\n    friday: 'Sexta',\n    saturday: 'Sábado',\n    sunday: 'Domingo'\n  };\n  \n  return hours.map(h => \n    `  • ${dayNames[h.day] || h.day}: ${h.open || 'N/A'} às ${h.close || 'N/A'}`\n  ).join('\\n');\n}\n\nfunction formatServices(services) {\n  if (!services || services.length === 0) return 'Não informado';\n  return services.map(s => `  • ${s}`).join('\\n');\n}\n\nfunction formatStaffList(staffList) {\n  if (!staffList || staffList.length === 0) return 'Nenhum profissional disponível no momento.';\n  \n  return staffList.map((staff, index) => {\n    const featured = staff.is_featured ? '⭐ ' : '';\n    const rating = staff.rating ? ` (${staff.rating}⭐)` : '';\n    const services = staff.services && staff.services.length > 0 \n      ? `\\n    Serviços: ${staff.services.join(', ')}`\n      : '';\n    const days = staff.available_days && staff.available_days.length > 0\n      ? `\\n    Disponível: ${formatDays(staff.available_days)}`\n      : '';\n    const duration = staff.appointment_duration\n      ? `\\n    Duração consulta: ${staff.appointment_duration} minutos`\n      : '';\n    const bio = staff.bio\n      ? `\\n    ${staff.bio}`\n      : '';\n    \n    return `\n${index + 1}. ${featured}${staff.name}${rating}\n   ${staff.specialty || staff.role}${services}${days}${duration}${bio}\n`;\n  }).join('\\n');\n}\n\nfunction formatDays(days) {\n  const dayNames = {\n    monday: 'Seg',\n    tuesday: 'Ter',\n    wednesday: 'Qua',\n    thursday: 'Qui',\n    friday: 'Sex',\n    saturday: 'Sáb',\n    sunday: 'Dom'\n  };\n  return days.map(d => dayNames[d] || d).join(', ');\n}\n\n// 🔒 RETORNAR COM client_id AUTENTICADO DO BANCO DE DADOS\nreturn {\n  json: {\n    ...webhookData,\n    // ⚠️ CRÍTICO: Sobrescrever client_id com valor do banco (não do webhook!)\n    client_id: location.client_id,\n    // Dados da localização\n    location_id: location.location_id,\n    location_name: location.location_name,\n    location_type: location.location_type,\n    location_address: location.address,\n    location_city: location.city,\n    location_phone: location.phone,\n    location_whatsapp: location.whatsapp_number,\n    location_working_hours: location.working_hours,\n    location_services: location.services_offered,\n    staff_total: location.total_staff,\n    staff_available: location.staff_available_online,\n    staff_list: location.staff_list,\n    location_context: locationContext,\n    has_location_data: true,\n    timestamp: new Date().toISOString()\n  }\n};"
+      },
+      "name": "💼 Construir Contexto Location + Staff1",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1968,
+        -32
+      ],
+      "id": "83ddc566-caf1-4825-8b5e-1699d55e82e5",
+      "notes": "🔒 SEGURANÇA CRÍTICA:\n\nEste node SOBRESCREVE o client_id do webhook com o valor correto do banco de dados.\n\nPrevine:\n✅ Spoofing de client_id\n✅ Acesso cruzado entre tenants\n✅ Vazamento de dados\n\nO client_id vem do RPC get_location_staff_summary(), que busca no banco baseado no inbox_id do Chatwoot (confiável).\n\nTODOS os nodes seguintes (Buscar Dados do Agente, Construir Contexto, etc) usarão o client_id CORRETO."
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://vnlfgnfaortdvmraoapq.supabase.co/rest/v1/rpc/get_conversation_history",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZubGZnbmZhb3J0ZHZtcmFvYXBxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjE3MTM1NDgsImV4cCI6MjA3NzI4OTU0OH0.Qu6ithTk2tNNG-SYQDN5BP15pb_xKufOQUhqAuwxT0U"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZubGZnbmZhb3J0ZHZtcmFvYXBxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjE3MTM1NDgsImV4cCI6MjA3NzI4OTU0OH0.Qu6ithTk2tNNG-SYQDN5BP15pb_xKufOQUhqAuwxT0U"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{\n  {\n    p_client_id: $json.client_id,\n    p_conversation_id: $json.conversation_id,\n    p_limit: $json.memory_limit || 50,\n    p_hours_back: $json.memory_hours_back || 24\n  }\n}}",
+        "options": {}
+      },
+      "name": "🧠 Buscar Histórico de Conversa (RPC)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1920,
+        96
+      ],
+      "id": "5dcb10dd-37cd-4a59-9ead-2bf92b69d47c",
+      "alwaysOutputData": true,
+      "credentials": {
+        "httpCustomAuth": {
+          "id": "NEn6NpNWjE7hCyWQ",
+          "name": "Supabase API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================================\n// CÓDIGO CORRIGIDO: Node \"📝 Formatar Histórico para LLM\"\n// ============================================================================\n// PROBLEMA: $input.first().json pega apenas 1 mensagem\n// SOLUÇÃO: Usar $input.all() para pegar todas as mensagens\n// ============================================================================\n\nconst previousData = $('Query RAG (Namespace Isolado)').first().json;\n\n// ✅ CORREÇÃO: Buscar TODAS as mensagens do input\nconst allInputs = $input.all();\n\n// Extrair array de mensagens\nlet historyData = [];\n\nconsole.log('🔍 DEBUG Formatar Histórico:');\nconsole.log('allInputs.length:', allInputs.length);\n\nif (allInputs.length > 0) {\n  // Extrair .json de cada input\n  historyData = allInputs.map(input => input.json);\n  \n  console.log('✅ Histórico extraído:', historyData.length, 'mensagens');\n} else {\n  console.log('⚠️ Nenhuma mensagem no input');\n}\n\n// Verificar se há histórico\nlet conversationHistory = '';\n\nif (historyData.length > 0) {\n  conversationHistory = '\\n\\n--- HISTÓRICO DA CONVERSA ---\\n';\n  \n  // Ordenar do mais antigo para mais recente (invertido)\n  const sortedHistory = [...historyData].reverse();\n  \n  sortedHistory.forEach(msg => {\n    const role = msg.message_role === 'user' ? '👤 Cliente' : '🤖 Assistente';\n    const timestamp = new Date(msg.message_timestamp).toLocaleString('pt-BR');\n    \n    conversationHistory += `\\n[${timestamp}] ${role}:\\n${msg.message_content}\\n`;\n  });\n  \n  conversationHistory += '\\n--- FIM DO HISTÓRICO ---\\n';\n  conversationHistory += '\\n📌 IMPORTANTE: Use o histórico acima para manter consistência nas respostas e entender o contexto da conversa atual.\\n';\n  \n  console.log('✅ Histórico formatado com', historyData.length, 'mensagens');\n} else {\n  conversationHistory = '\\n\\n--- NOVA CONVERSA (sem histórico anterior) ---\\n';\n  console.log('ℹ️ Primeira mensagem da conversa (sem histórico)');\n}\n\nreturn {\n  json: {\n    ...previousData,\n    conversation_history: conversationHistory,\n    history_messages_count: historyData.length\n  }\n};\n"
+      },
+      "name": "📝 Formatar Histórico para LLM",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2176,
+        96
+      ],
+      "id": "e1fa6730-2709-4b89-810a-23dbf852a0f8",
+      "notes": "✅ CORREÇÃO APLICADA (12/11/2025)\nBug: $input.first().json processava só 1 mensagem\nFix: $input.all().map() processa TODAS as mensagens\nResultado: Bot agora lembra contexto! 🎉"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Preparar apenas mensagem do ASSISTANT para salvar (user já foi salvo antes!)\nconst originalData = $input.item.json;\n\nconst assistantMessage = {\n  p_client_id: originalData.client_id,\n  p_conversation_id: originalData.conversation_id,\n  p_message_role: 'assistant',\n  p_message_content: originalData.final_response,\n  p_contact_id: originalData.contact_id || null,\n  p_agent_id: originalData.agent_id || 'default',\n  p_channel: originalData.channel || 'whatsapp',\n  p_has_attachments: originalData.has_client_media || false,\n  p_attachments: JSON.stringify(originalData.client_media_attachments || []),\n  p_metadata: JSON.stringify({\n    llm_model: originalData.llm_model || 'gpt-4o-mini',\n    llm_provider: originalData.llm_provider || 'openai',\n    tools_used: originalData.tools_enabled || []\n  })\n};\n\nreturn {\n  json: assistantMessage\n};"
+      },
+      "name": "📦 Preparar Mensagens para Memória",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3840,
+        96
+      ],
+      "id": "a0a64e74-1964-44c9-8d5d-0ce1dfbf4ea1"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Preservar dados originais após salvar na memória\nconst originalData = $('Construir Resposta Final').first().json;\nconst memorySaveResults = $input.all();\n\nconsole.log('✅ Mensagens salvas na memória:', memorySaveResults.length);\n\n// Extrair IDs salvos (se retornados)\nconst savedIds = memorySaveResults.map(r => r.json || r).filter(id => id);\n\nreturn {\n  json: {\n    ...originalData,\n    memory_saved: true,\n    memory_message_ids: savedIds,\n    memory_save_count: memorySaveResults.length\n  }\n};"
+      },
+      "name": "🔄 Preservar Dados Após Memória",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4336,
+        96
+      ],
+      "id": "1e788f71-c404-4de4-813a-1b351b6237c5"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://vnlfgnfaortdvmraoapq.supabase.co/rest/v1/rpc/save_conversation_message",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZubGZnbmZhb3J0ZHZtcmFvYXBxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjE3MTM1NDgsImV4cCI6MjA3NzI4OTU0OH0.Qu6ithTk2tNNG-SYQDN5BP15pb_xKufOQUhqAuwxT0U"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZubGZnbmZhb3J0ZHZtcmFvYXBxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjE3MTM1NDgsImV4cCI6MjA3NzI4OTU0OH0.Qu6ithTk2tNNG-SYQDN5BP15pb_xKufOQUhqAuwxT0U"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json }}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "text"
+            }
+          }
+        }
+      },
+      "name": "💾 Salvar Resposta do Assistant",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        4096,
+        96
+      ],
+      "id": "41b5cab1-dc05-4e95-b3b8-707650f723df",
+      "alwaysOutputData": true,
+      "credentials": {
+        "httpCustomAuth": {
+          "id": "NEn6NpNWjE7hCyWQ",
+          "name": "Supabase API"
+        }
+      },
+      "notes": "💾 Salva resposta do ASSISTENTE\nExecutado DEPOIS de gerar resposta do LLM\nRPC: save_conversation_message"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Processar resposta do RPC e adicionar aos dados\nconst previousData = $('Query RAG (Namespace Isolado)').first().json;\nconst configResponse = $input.first().json;\n\n// Extrair config (RPC retorna array)\nconst config = Array.isArray(configResponse) && configResponse.length > 0 \n  ? configResponse[0] \n  : { memory_limit: 50, memory_hours_back: 24, memory_enabled: true };\n\nconsole.log(`✅ Memória configurada: limit=${config.memory_limit}, hours=${config.memory_hours_back}, enabled=${config.memory_enabled}`);\n\nreturn {\n  json: {\n    ...previousData,\n    memory_limit: config.memory_limit,\n    memory_hours_back: config.memory_hours_back,\n    memory_enabled: config.memory_enabled\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        96
+      ],
+      "id": "5a5b16e3-b99f-4f43-a0da-5072a3af7977",
+      "name": "🔄 Processar Config de Memória"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://vnlfgnfaortdvmraoapq.supabase.co/rest/v1/rpc/get_memory_config",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZubGZnbmZhb3J0ZHZtcmFvYXBxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjE3MTM1NDgsImV4cCI6MjA3NzI4OTU0OH0.Qu6ithTk2tNNG-SYQDN5BP15pb_xKufOQUhqAuwxT0U"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZubGZnbmZhb3J0ZHZtcmFvYXBxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjE3MTM1NDgsImV4cCI6MjA3NzI4OTU0OH0.Qu6ithTk2tNNG-SYQDN5BP15pb_xKufOQUhqAuwxT0U"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"p_client_id\": \"{{ $json.client_id }}\",\n  \"p_agent_id\": \"{{ $json.agent_id }}\"\n}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        576,
+        96
+      ],
+      "id": "1efd6af7-fd29-43f2-a2f7-9853ec0afb16",
+      "name": "⚙️ Buscar Configuração de Memória1",
+      "credentials": {
+        "httpCustomAuth": {
+          "id": "NEn6NpNWjE7hCyWQ",
+          "name": "Supabase API"
+        }
+      },
+      "notes": "📊 Configuração Dinâmica por Cliente/Agente\nBusca: memory_limit, memory_hours_back, memory_enabled\nPadrão: 50 mensagens, 24 horas\nGerenciável via SQL na tabela memory_config"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Preparar body de forma segura para salvar mensagem do usuário\nconst data = $input.item.json;\n\nreturn {\n  json: {\n    p_client_id: data.client_id,\n    p_conversation_id: data.conversation_id,\n    p_message_role: 'user',\n    p_message_content: data.message_body,\n    p_contact_id: data.contact_id || null,\n    p_agent_id: data.agent_id || 'default',\n    p_channel: data.channel || 'whatsapp',\n    p_has_attachments: Boolean(data.has_attachments),\n    p_attachments: JSON.stringify(data.attachments || []),\n    p_metadata: {}\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1152,
+        96
+      ],
+      "id": "3052f0e6-d85b-45b0-afd0-1c0739667bb2",
+      "name": "📦 Preparar Body Salvar User"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://vnlfgnfaortdvmraoapq.supabase.co/rest/v1/rpc/save_conversation_message",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZubGZnbmZhb3J0ZHZtcmFvYXBxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjE3MTM1NDgsImV4cCI6MjA3NzI4OTU0OH0.Qu6ithTk2tNNG-SYQDN5BP15pb_xKufOQUhqAuwxT0U"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZubGZnbmZhb3J0ZHZtcmFvYXBxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjE3MTM1NDgsImV4cCI6MjA3NzI4OTU0OH0.Qu6ithTk2tNNG-SYQDN5BP15pb_xKufOQUhqAuwxT0U"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json }}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "text"
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        1440,
+        96
+      ],
+      "id": "4ef4ac23-0a39-4ec2-9bf4-fad02955ddcc",
+      "name": "💾 Salvar User (HTTP)",
+      "credentials": {
+        "httpCustomAuth": {
+          "id": "NEn6NpNWjE7hCyWQ",
+          "name": "Supabase API"
+        }
+      },
+      "notes": "💾 Salva mensagem do USUÁRIO\nExecutado ANTES de buscar histórico (ordem crítica!)\nRPC: save_conversation_message"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Preservar dados originais após salvar mensagem do usuário\nconst originalData = $('Query RAG (Namespace Isolado)').first().json;\nconst userMessageId = $input.first().json.data; // UUID retornado\n\nreturn {\n  json: {\n    ...originalData,\n    user_message_saved_id: userMessageId,\n    user_message_saved: true\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1680,
+        96
+      ],
+      "id": "d7dca191-d1b5-4314-b460-28b66835fdb4",
+      "name": "🔄 Preservar Dados Originais"
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.media_url }}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "file"
+            }
+          }
+        }
+      },
+      "id": "a447e1a6-15d4-4343-9671-02df3d225591",
+      "name": "2️⃣ Baixar Imagem",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -3728,
+        -288
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Converter resposta em base64\nconst items = $input.all();\nconst output = [];\n\nfor (const item of items) {\n  const imageData = item.binary?.data;\n  \n  if (imageData) {\n    const base64 = imageData.data;\n    output.push({\n      json: {\n        ...item.json,\n        image_base64: base64\n      }\n    });\n  } else {\n    output.push({\n      json: {\n        ...item.json,\n        error: 'Não conseguiu converter imagem'\n      }\n    });\n  }\n}\n\nreturn output;"
+      },
+      "id": "366ab15c-d7a3-4e24-9654-dab2f1371c3f",
+      "name": "Converter Base64",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -3520,
+        -288
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/chat/completions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "={{$env.OPENAI_API_KEY}}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"gpt-4o-mini\",\n  \"messages\": [\n    {\n      \"role\": \"user\",\n      \"content\": [\n        {\n          \"type\": \"text\",\n          \"text\": \"Descreva esta imagem em português de forma detalhada. Inclua: objetos visíveis, pessoas (se houver), cores, texto legível, e contexto geral.\"\n        },\n        {\n          \"type\": \"image_url\",\n          \"image_url\": {\n            \"url\": \"data:image/jpeg;base64,{{ $json.image_base64 }}\"\n          }\n        }\n      ]\n    }\n  ],\n  \"max_tokens\": 500\n}",
+        "options": {}
+      },
+      "id": "a5d3f4f9-57bc-4697-ac22-4ec7305737bf",
+      "name": "3️⃣ OpenAI Vision",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -3280,
+        -288
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// NODE 4: FORMATAR RESPOSTA FINAL\nconst openaiData = $input.all()[0].json; // Resposta do OpenAI\nconst originalData = $('Converter Base64').all()[0].json; // Dados originais\n\nconst output = [];\n\n// Extrair descrição do OpenAI\nconst description = openaiData.choices?.[0]?.message?.content;\n\nif (description) {\n  // SUCESSO!\n  const mediaContent = `\\n\\n[IMAGEM ENVIADA PELO USUARIO]:\\n${description}\\n`;\n  const newMessage = originalData.message_body + mediaContent;\n  \n  output.push({\n    json: {\n      ...originalData, // ← Todos os campos originais preservados!\n      message_body: newMessage,\n      original_message_body: originalData.message_body,\n      media_processed: true,\n      media_content: mediaContent,\n      vision_success: true\n    }\n  });\n} else {\n  // FALHA\n  output.push({\n    json: {\n      ...originalData, // ← Campos originais preservados mesmo em erro\n      media_processed: false,\n      vision_success: false,\n      error: 'OpenAI não retornou descrição'\n    }\n  });\n}\n\nreturn output;"
+      },
+      "id": "cfcd1d87-557b-4a08-9791-0c8233e9be3c",
+      "name": "4️⃣ Formatar Resposta",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -3072,
+        -288
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// NODE 1: DETECTAR TIPO DE MÍDIA\nconst items = $input.all();\nconst output = [];\n\nfor (const item of items) {\n  const data = item.json;\n  const attachments = data.attachments || [];\n  \n  if (attachments.length === 0) {\n    // SEM MÍDIA\n    output.push({\n      json: {\n        ...data,\n        has_media: false,\n        media_type: null\n      }\n    });\n    continue;\n  }\n  \n  // Verificar tipo de mídia\n  const imageAttachment = attachments.find(att => att.file_type === 'image');\n  const audioAttachment = attachments.find(att => att.file_type === 'audio');\n  const fileAttachment = attachments.find(att => att.file_type === 'file');\n  \n  if (imageAttachment) {\n    // IMAGEM\n    output.push({\n      json: {\n        ...data,\n        has_media: true,\n        media_type: 'image',\n        media_url: imageAttachment.data_url,\n        media_id: imageAttachment.id,\n        media_size: imageAttachment.file_size\n      }\n    });\n  } else if (audioAttachment) {\n    // ÁUDIO\n    output.push({\n      json: {\n        ...data,\n        has_media: true,\n        media_type: 'audio',\n        media_url: audioAttachment.data_url,\n        media_id: audioAttachment.id,\n        media_size: audioAttachment.file_size\n      }\n    });\n  } else if (fileAttachment) {\n    // PDF ou DOCUMENTO (verificar extensão)\n    const url = fileAttachment.data_url || '';\n    const isPdf = url.toLowerCase().includes('.pdf') || fileAttachment.extension === 'pdf';\n    \n    if (isPdf) {\n      output.push({\n        json: {\n          ...data,\n          has_media: true,\n          media_type: 'pdf',\n          media_url: fileAttachment.data_url,\n          media_id: fileAttachment.id,\n          media_size: fileAttachment.file_size\n        }\n      });\n    } else {\n      // Outro tipo de arquivo não suportado\n      output.push({\n        json: {\n          ...data,\n          has_media: false,\n          media_type: 'unsupported',\n          unsupported_file_type: fileAttachment.file_type\n        }\n      });\n    }\n  } else {\n    // SEM MÍDIA SUPORTADA\n    output.push({\n      json: {\n        ...data,\n        has_media: false,\n        media_type: null\n      }\n    });\n  }\n}\n\nreturn output;\n"
+      },
+      "id": "619051e8-abbc-4634-9b22-ebc7a02c1dd9",
+      "name": "1️⃣ Detectar Mídia",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -4256,
+        96
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "expression",
+        "output": "={{ \n  $json.media_type === 'image' ? 0 :\n  $json.media_type === 'pdf' ? 1 :\n  $json.media_type === 'audio' ? 2 :\n  3\n}}",
+        "looseTypeValidation": true
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.3,
+      "position": [
+        -4032,
+        64
+      ],
+      "id": "3f1aebca-b459-4988-bae7-a2e3e177fd0d",
+      "name": "Switch"
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.media_url }}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "file"
+            }
+          }
+        }
+      },
+      "id": "a0ac2099-d013-4208-81c5-461bd63db39a",
+      "name": "2️⃣ Baixar PDF",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -3760,
+        -112
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\nconst output = [];\n\nfor (const item of items) {\n  const binaryData = item.binary?.data;\n  \n  if (binaryData && binaryData.data) {\n    output.push({\n      json: {\n        ...item.json,\n        pdf_base64: binaryData.data\n      }\n    });\n  } else {\n    output.push({\n      json: {\n        ...item.json,\n        error: 'PDF não convertido'\n      }\n    });\n  }\n}\n\nreturn output;"
+      },
+      "id": "9471f8a1-7a2b-4281-ae24-f156d99d069c",
+      "name": "Converter PDF Base64",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -3584,
+        -112
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const openaiData = $input.all()[0].json;\nconst originalData = $('Converter PDF Base64').all()[0].json;\n\nconst output = [];\nconst description = openaiData.choices?.[0]?.message?.content;\n\nif (description) {\n  const mediaContent = `\\n\\n[PDF ENVIADO PELO USUARIO]:\\n${description}\\n`;\n  const newMessage = originalData.message_body + mediaContent;\n  \n  output.push({\n    json: {\n      ...originalData,\n      message_body: newMessage,\n      original_message_body: originalData.message_body,\n      media_processed: true,\n      media_content: mediaContent,\n      vision_success: true\n    }\n  });\n} else {\n  output.push({\n    json: {\n      ...originalData,\n      media_processed: false,\n      vision_success: false,\n      error: 'OpenAI não processou PDF'\n    }\n  });\n}\n\nreturn output;\n"
+      },
+      "id": "d31b02bb-72b6-42d4-b811-fda1e587b49e",
+      "name": "Formatar Resposta PDF",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -3024,
+        -112
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.media_url }}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "file"
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        -3648,
+        48
+      ],
+      "id": "d1d66af9-b564-4f41-beee-c0a80abaafdf",
+      "name": "Baixar Áudio"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/audio/transcriptions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "={{$env.OPENAI_API_KEY}}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "parameterType": "formBinaryData",
+              "name": "file",
+              "inputDataFieldName": "data"
+            },
+            {
+              "name": "model",
+              "value": "whisper-1"
+            },
+            {
+              "name": "language",
+              "value": "pt"
+            },
+            {
+              "name": "response_format",
+              "value": "json"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        -3392,
+        48
+      ],
+      "id": "f6435bba-faad-4474-b351-aa07e309530e",
+      "name": "Whisper API"
+    },
+    {
+      "parameters": {
+        "jsCode": "const whisperData = $input.all()[0].json;\nconst originalData = $('Baixar Áudio').all()[0].json;\n\nconst output = [];\nconst transcription = whisperData.text;\n\nif (transcription) {\n  const mediaContent = `\\n\\n[ÁUDIO ENVIADO PELO USUARIO - Transcrição]:\\n\"${transcription}\"\\n`;\n  const newMessage = originalData.message_body + mediaContent;\n  \n  output.push({\n    json: {\n      ...originalData,\n      message_body: newMessage,\n      original_message_body: originalData.message_body,\n      media_processed: true,\n      media_content: mediaContent,\n      audio_transcription: transcription,\n      whisper_success: true\n    }\n  });\n} else {\n  output.push({\n    json: {\n      ...originalData,\n      media_processed: false,\n      whisper_success: false,\n      error: 'Whisper não transcreveu áudio'\n    }\n  });\n}\n\nreturn output;\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -3152,
+        48
+      ],
+      "id": "e99b9932-6c13-43be-8ad2-3076167771c8",
+      "name": "Formatar Resposta Áudio"
+    },
+    {
+      "parameters": {
+        "numberInputs": 4
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        -2656,
+        64
+      ],
+      "id": "1b8b31c3-a154-4b4d-a8ec-81153faf546e",
+      "name": "Merge"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/chat/completions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "={{$env.OPENAI_API_KEY}}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json.pdf_api_payload }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        -3216,
+        -112
+      ],
+      "id": "c7f32170-1fcb-465c-b404-b9da22ebd81c",
+      "name": "GPT Processar PDF"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Preparar dados para análise NLP\nconst data = $input.item.json;\n\n// ✅ CORREÇÃO: Buscar message_body do Merge de mídias (como fizemos no Construir Contexto)\nconst mergeNode = $('Merge').first().json;\nconst messageBody = mergeNode.message_body || data.message_body || '';\n\n// Extrair contexto de localização (se disponível)\nconst services = data.location_services || [];\nconst staffList = data.staff_list || [];\nconst staffNames = staffList.map(s => s.name).join(', ');\nconst locationType = data.location_type || 'clinica';\n\nconsole.log('=== PREPARANDO ANÁLISE NLP ===');\nconsole.log('Mensagem:', messageBody.substring(0, 100) + '...');\nconsole.log('Serviços disponíveis:', services.length);\nconsole.log('Profissionais:', staffNames);\n\nreturn {\n  json: {\n    ...data,\n    nlp_input: {\n      message: messageBody,  // ← AGORA VEM DO MERGE CORRETO!\n      available_services: services,\n      available_professionals: staffNames,\n      business_type: locationType,\n      has_context: services.length > 0 || staffNames.length > 0\n    }\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1216,
+        80
+      ],
+      "id": "ad5180f8-1333-417e-b399-b703de9c8394",
+      "name": "1️⃣ Preparar Dados NLP"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/chat/completions",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "openAiApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json.nlp_api_payload }}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        -800,
+        80
+      ],
+      "id": "bd2432b7-11ce-44d8-9795-d95dac714865",
+      "name": "2️⃣ Chamar GPT NLP",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "e2c1PnxxuOmDsepf",
+          "name": "supabase_service_role"
+        },
+        "openAiApi": {
+          "id": "fApepR9L7jV0cyVD",
+          "name": "OpenAI API Header"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Processar resposta do GPT NLP\nconst nlpResponse = $input.item.json;\nconst previousData = $('1️⃣ Preparar Dados NLP').first().json;\n\nlet nlpData = {};\n\ntry {\n  // Extrair JSON do GPT\n  const content = nlpResponse.choices?.[0]?.message?.content;\n  \n  if (content) {\n    nlpData = JSON.parse(content);\n    \n    console.log('=== ANÁLISE NLP COMPLETA ===');\n    console.log('Intent:', nlpData.intent);\n    console.log('Confidence:', (nlpData.confidence * 100).toFixed(0) + '%');\n    console.log('Sentiment:', nlpData.sentiment);\n    console.log('Urgency:', nlpData.urgency);\n    console.log('Requires Human:', nlpData.requires_human);\n    console.log('Entities:', JSON.stringify(nlpData.entities));\n  } else {\n    throw new Error('Sem conteúdo na resposta');\n  }\n} catch (error) {\n  console.error('❌ Erro ao parsear NLP:', error);\n  console.error('Content:', nlpResponse.choices?.[0]?.message?.content);\n  \n  // Fallback seguro\n  nlpData = {\n    intent: 'informacao_geral',\n    confidence: 0.5,\n    entities: {},\n    sentiment: 'neutro',\n    urgency: 'media',\n    requires_human: false\n  };\n}\n\n// Enriquecer dados com análise NLP\nreturn {\n  json: {\n    ...previousData,\n    nlp_intent: nlpData.intent || 'informacao_geral',\n    nlp_confidence: nlpData.confidence || 0.5,\n    nlp_entities: nlpData.entities || {},\n    nlp_sentiment: nlpData.sentiment || 'neutro',\n    nlp_urgency: nlpData.urgency || 'media',\n    nlp_requires_human: nlpData.requires_human || false,\n    nlp_analysis: nlpData,\n    nlp_processed: true\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -592,
+        80
+      ],
+      "id": "83715000-8357-4c68-90aa-24f5eabdf3c7",
+      "name": "3️⃣ Processar Análise NLP"
+    },
+    {
+      "parameters": {
+        "mode": "expression",
+        "numberOutputs": 3,
+        "output": "={{\n  // Branch 0: Emergência ou requer humano\n  ($json.nlp_intent === 'emergencia' || \n   $json.nlp_urgency === 'alta' || \n   $json.nlp_requires_human === true) ? 0 :\n  \n  // Branch 1: Agendamento (futuro)\n  ($json.nlp_intent === 'agendar_consulta' || \n   $json.nlp_intent === 'cancelar_agendamento' || \n   $json.nlp_intent === 'reagendar') ? 1 :\n  \n  // Branch 2: Fluxo normal (RAG + LLM)\n  2\n}}"
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.3,
+      "position": [
+        -384,
+        80
+      ],
+      "id": "e9ecbe7c-4096-4491-8c06-a3068dada111",
+      "name": "4️⃣ Rotear por Intent"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Montar payload seguro para GPT NLP\nconst data = $input.item.json;\n\n// Escapar mensagem para JSON\nconst message = (data.nlp_input.message || '')\n  .replace(/\\\\/g, '\\\\\\\\')  // Escape backslash\n  .replace(/\"/g, '\\\\\"')    // Escape quotes\n  .replace(/\\n/g, '\\\\n')   // Escape newlines\n  .replace(/\\r/g, '\\\\r')   // Escape carriage returns\n  .replace(/\\t/g, '\\\\t');  // Escape tabs\n\nconst services = JSON.stringify(data.nlp_input.available_services || []);\nconst professionals = (data.nlp_input.available_professionals || '').replace(/\"/g, '\\\\\"');\nconst businessType = (data.nlp_input.business_type || 'clinica').replace(/\"/g, '\\\\\"');\n\n// Montar payload completo\nconst payload = {\n  model: \"gpt-4o-mini\",\n  messages: [\n    {\n      role: \"system\",\n      content: \"Você é um analisador NLP especializado. Analise mensagens de clientes e retorne APENAS JSON válido.\\n\\nIntents possíveis:\\n- agendar_consulta\\n- cancelar_agendamento\\n- reagendar\\n- duvida_servico\\n- duvida_preco\\n- reclamacao\\n- elogio\\n- emergencia\\n- informacao_geral\\n\\nRetorne JSON com:\\n{\\n  \\\"intent\\\": \\\"string\\\",\\n  \\\"confidence\\\": 0.0-1.0,\\n  \\\"entities\\\": {\\n    \\\"service\\\": \\\"string ou null\\\",\\n    \\\"professional\\\": \\\"string ou null\\\",\\n    \\\"date\\\": \\\"string ou null\\\",\\n    \\\"time\\\": \\\"string ou null\\\"\\n  },\\n  \\\"sentiment\\\": \\\"positivo/neutro/negativo\\\",\\n  \\\"urgency\\\": \\\"baixa/media/alta\\\",\\n  \\\"requires_human\\\": boolean\\n}\\n\\nRegras:\\n- Emergência ou urgência alta: requires_human = true\\n- Reclamação séria: requires_human = true\\n- Dúvidas simples: requires_human = false\"\n    },\n    {\n      role: \"user\",\n      content: `Analise:\\n\\nMensagem: ${message}\\n\\nContexto:\\n- Serviços: ${services}\\n- Profissionais: ${professionals}\\n- Tipo: ${businessType}\\n\\nRETORNE APENAS JSON.`\n    }\n  ],\n  temperature: 0.1,\n  max_tokens: 300,\n  response_format: {\n    type: \"json_object\"\n  }\n};\n\nreturn {\n  json: {\n    ...data,\n    nlp_api_payload: payload\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1008,
+        80
+      ],
+      "id": "3f2322dd-0e20-422d-808a-2875b496c144",
+      "name": "2️⃣A Montar Payload NLP"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extrair texto de PDF de forma mais robusta\nconst data = $input.item.json;\nconst pdfBase64 = data.pdf_base64;\n\nlet extractedText = '';\n\ntry {\n  // Decodificar base64\n  const pdfBuffer = Buffer.from(pdfBase64, 'base64');\n  const pdfString = pdfBuffer.toString('latin1');\n  \n  // Método 1: Extrair texto entre parênteses\n  const textMatches = pdfString.match(/\\(([^)]+)\\)/g);\n  if (textMatches) {\n    extractedText = textMatches\n      .map(match => match.replace(/[()]/g, ''))\n      .join(' ')\n      .replace(/\\\\([nrt])/g, ' ')  // Remove escape chars\n      .replace(/\\s+/g, ' ')\n      .trim();\n  }\n  \n  // Método 2: Buscar por BT...ET (text blocks em PDF)\n  if (!extractedText || extractedText.length < 50) {\n    const btMatches = pdfString.match(/BT(.*?)ET/gs);\n    if (btMatches) {\n      extractedText = btMatches\n        .map(block => {\n          return block\n            .replace(/BT|ET/g, '')\n            .replace(/\\/[A-Z][A-Za-z0-9]+ \\d+(\\.\\d+)? Tf/g, '') // Remove font defs\n            .replace(/\\d+ \\d+ Td/g, '') // Remove positioning\n            .replace(/[()<>\\[\\]]/g, '')\n            .replace(/[^a-zA-Z0-9\\s\\u00C0-\\u00FF,.:;!?-]/g, ' ')\n            .trim();\n        })\n        .filter(text => text.length > 0)\n        .join(' ');\n    }\n  }\n  \n  // Fallback: Pegar qualquer texto visível\n  if (!extractedText || extractedText.length < 20) {\n    extractedText = pdfString\n      .replace(/[^a-zA-Z0-9\\s\\u00C0-\\u00FF,.:;!?-]/g, ' ')\n      .replace(/\\s+/g, ' ')\n      .trim();\n  }\n  \n} catch (error) {\n  extractedText = `[Erro ao extrair texto: ${error.message}]`;\n}\n\n// Se não conseguiu extrair texto útil\nif (!extractedText || extractedText.length < 20) {\n  extractedText = \"Não foi possível extrair texto legível deste PDF. Pode ser um PDF de imagem escaneada ou com proteção.\";\n}\n\nconsole.log('📄 Texto extraído (primeiros 200 chars):', extractedText.substring(0, 200));\n\n// Montar payload para GPT\nconst payload = {\n  model: \"gpt-4o\",\n  messages: [\n    {\n      role: \"user\",\n      content: `Analise este documento PDF em português. Resuma as informações principais de forma clara e organizada.\\n\\nConteúdo extraído do PDF:\\n${extractedText}`\n    }\n  ],\n  max_tokens: 1500\n};\n\nreturn {\n  json: {\n    ...data,\n    pdf_text: extractedText,\n    pdf_api_payload: payload\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -3392,
+        -112
+      ],
+      "id": "eefd15a3-e493-4a94-a2a9-f664cf3d5359",
+      "name": "Montar Payload PDF"
+    }
+  ],
+  "connections": {
+    "Chatwoot Webhook": {
+      "main": [
+        [
+          {
+            "node": "Identificar Cliente e Agente",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Identificar Cliente e Agente": {
+      "main": [
+        [
+          {
+            "node": "Filtrar Apenas Incoming",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filtrar Apenas Incoming": {
+      "main": [
+        [
+          {
+            "node": "1️⃣ Detectar Mídia",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Buscar Dados do Agente (HTTP)": {
+      "main": [
+        [
+          {
+            "node": "Merge: Agente + Mídia",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Construir Contexto Completo": {
+      "main": [
+        [
+          {
+            "node": "Query RAG (Namespace Isolado)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Query RAG (Namespace Isolado)": {
+      "main": [
+        [
+          {
+            "node": "⚙️ Buscar Configuração de Memória1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparar Prompt LLM": {
+      "main": [
+        [
+          {
+            "node": "LLM (GPT-4o-mini + Tools)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "LLM (GPT-4o-mini + Tools)": {
+      "main": [
+        [
+          {
+            "node": "Preservar Contexto Após LLM",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preservar Contexto Após LLM": {
+      "main": [
+        [
+          {
+            "node": "Chamou Tool?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Chamou Tool?": {
+      "main": [
+        [
+          {
+            "node": "Executar Tools",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Construir Resposta Final",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Executar Tools": {
+      "main": [
+        [
+          {
+            "node": "Construir Resposta Final",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Construir Resposta Final": {
+      "main": [
+        [
+          {
+            "node": "📦 Preparar Mensagens para Memória",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tem Mídia do Acervo?": {
+      "main": [
+        [
+          {
+            "node": "Registrar Log de Envio (HTTP)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Atualizar Usage Tracking (HTTP)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Registrar Log de Envio (HTTP)": {
+      "main": [
+        [
+          {
+            "node": "Preservar Dados Após Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preservar Dados Após Log": {
+      "main": [
+        [
+          {
+            "node": "Atualizar Usage Tracking (HTTP)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Atualizar Usage Tracking (HTTP)": {
+      "main": [
+        [
+          {
+            "node": "Preservar Dados Após Usage Tracking",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preservar Dados Após Usage Tracking": {
+      "main": [
+        [
+          {
+            "node": "Enviar Resposta via Chatwoot",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enviar Resposta via Chatwoot": {
+      "main": [
+        [
+          {
+            "node": "Log Chatwoot Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Chatwoot Response": {
+      "main": [
+        [
+          {
+            "node": "Tem Anexos?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tem Anexos?": {
+      "main": [
+        [
+          {
+            "node": "Download Arquivo do Supabase",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Download Arquivo do Supabase": {
+      "main": [
+        [
+          {
+            "node": "Upload Anexo para Chatwoot",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upload Anexo para Chatwoot": {
+      "main": [
+        [
+          {
+            "node": "Log Upload Resultado",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Buscar Mídia Triggers (RPC)": {
+      "main": [
+        [
+          {
+            "node": "Merge: Agente + Mídia",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge: Agente + Mídia": {
+      "main": [
+        [
+          {
+            "node": "1️⃣ Preparar Dados NLP",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🏢 Detectar Localização e Staff (RPC)1": {
+      "main": [
+        [
+          {
+            "node": "💼 Construir Contexto Location + Staff1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "💼 Construir Contexto Location + Staff1": {
+      "main": [
+        [
+          {
+            "node": "Buscar Dados do Agente (HTTP)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🧠 Buscar Histórico de Conversa (RPC)": {
+      "main": [
+        [
+          {
+            "node": "📝 Formatar Histórico para LLM",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "📝 Formatar Histórico para LLM": {
+      "main": [
+        [
+          {
+            "node": "Preparar Prompt LLM",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "📦 Preparar Mensagens para Memória": {
+      "main": [
+        [
+          {
+            "node": "💾 Salvar Resposta do Assistant",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🔄 Preservar Dados Após Memória": {
+      "main": [
+        [
+          {
+            "node": "Tem Mídia do Acervo?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "💾 Salvar Resposta do Assistant": {
+      "main": [
+        [
+          {
+            "node": "🔄 Preservar Dados Após Memória",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🔄 Processar Config de Memória": {
+      "main": [
+        [
+          {
+            "node": "📦 Preparar Body Salvar User",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "⚙️ Buscar Configuração de Memória1": {
+      "main": [
+        [
+          {
+            "node": "🔄 Processar Config de Memória",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "📦 Preparar Body Salvar User": {
+      "main": [
+        [
+          {
+            "node": "💾 Salvar User (HTTP)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "💾 Salvar User (HTTP)": {
+      "main": [
+        [
+          {
+            "node": "🔄 Preservar Dados Originais",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🔄 Preservar Dados Originais": {
+      "main": [
+        [
+          {
+            "node": "🧠 Buscar Histórico de Conversa (RPC)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2️⃣ Baixar Imagem": {
+      "main": [
+        [
+          {
+            "node": "Converter Base64",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Converter Base64": {
+      "main": [
+        [
+          {
+            "node": "3️⃣ OpenAI Vision",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "3️⃣ OpenAI Vision": {
+      "main": [
+        [
+          {
+            "node": "4️⃣ Formatar Resposta",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "4️⃣ Formatar Resposta": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "1️⃣ Detectar Mídia": {
+      "main": [
+        [
+          {
+            "node": "Switch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch": {
+      "main": [
+        [
+          {
+            "node": "2️⃣ Baixar Imagem",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "2️⃣ Baixar PDF",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Baixar Áudio",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 3
+          }
+        ]
+      ]
+    },
+    "2️⃣ Baixar PDF": {
+      "main": [
+        [
+          {
+            "node": "Converter PDF Base64",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Converter PDF Base64": {
+      "main": [
+        [
+          {
+            "node": "Montar Payload PDF",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Formatar Resposta PDF": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Baixar Áudio": {
+      "main": [
+        [
+          {
+            "node": "Whisper API",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Whisper API": {
+      "main": [
+        [
+          {
+            "node": "Formatar Resposta Áudio",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Formatar Resposta Áudio": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "Merge": {
+      "main": [
+        [
+          {
+            "node": "🏢 Detectar Localização e Staff (RPC)1",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Buscar Mídia Triggers (RPC)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GPT Processar PDF": {
+      "main": [
+        [
+          {
+            "node": "Formatar Resposta PDF",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "1️⃣ Preparar Dados NLP": {
+      "main": [
+        [
+          {
+            "node": "2️⃣A Montar Payload NLP",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2️⃣ Chamar GPT NLP": {
+      "main": [
+        [
+          {
+            "node": "3️⃣ Processar Análise NLP",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "3️⃣ Processar Análise NLP": {
+      "main": [
+        [
+          {
+            "node": "4️⃣ Rotear por Intent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "4️⃣ Rotear por Intent": {
+      "main": [
+        [
+          {
+            "node": "Construir Contexto Completo",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Construir Contexto Completo",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Construir Contexto Completo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2️⃣A Montar Payload NLP": {
+      "main": [
+        [
+          {
+            "node": "2️⃣ Chamar GPT NLP",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Montar Payload PDF": {
+      "main": [
+        [
+          {
+            "node": "GPT Processar PDF",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "meta": {
+    "instanceId": "569d30e41eb76a1ea495af04713ddcb7e6304e9943292f9d85d95af4c52eb47b"
+  }
+}
