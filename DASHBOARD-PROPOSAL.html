@@ -1,0 +1,737 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard SaaS Multi-Tenant - Proposta Visual</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f5f7fa;
+        }
+
+        .topbar {
+            background: white;
+            padding: 15px 30px;
+            border-bottom: 1px solid #e0e0e0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
+
+        .topbar h1 {
+            font-size: 20px;
+            color: #667eea;
+            font-weight: 600;
+        }
+
+        .user-menu {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .user-avatar {
+            width: 35px;
+            height: 35px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 600;
+            cursor: pointer;
+        }
+
+        .container {
+            display: flex;
+            height: calc(100vh - 66px);
+        }
+
+        .sidebar {
+            width: 260px;
+            background: white;
+            border-right: 1px solid #e0e0e0;
+            padding: 20px 0;
+            overflow-y: auto;
+        }
+
+        .nav-item {
+            padding: 12px 25px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            color: #555;
+            cursor: pointer;
+            transition: all 0.2s;
+            border-left: 3px solid transparent;
+        }
+
+        .nav-item:hover {
+            background: #f5f7fa;
+            color: #667eea;
+        }
+
+        .nav-item.active {
+            background: #f0f4ff;
+            color: #667eea;
+            border-left-color: #667eea;
+            font-weight: 600;
+        }
+
+        .nav-icon {
+            font-size: 20px;
+        }
+
+        .nav-section {
+            padding: 8px 25px;
+            font-size: 11px;
+            text-transform: uppercase;
+            color: #999;
+            font-weight: 600;
+            margin-top: 20px;
+        }
+
+        .main-content {
+            flex: 1;
+            overflow-y: auto;
+            padding: 30px;
+        }
+
+        .page-header {
+            margin-bottom: 30px;
+        }
+
+        .page-header h2 {
+            font-size: 28px;
+            color: #333;
+            margin-bottom: 5px;
+        }
+
+        .page-header p {
+            color: #666;
+            font-size: 14px;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .stat-card {
+            background: white;
+            padding: 25px;
+            border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+            border: 1px solid #e0e0e0;
+        }
+
+        .stat-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+
+        .stat-label {
+            font-size: 13px;
+            color: #666;
+            text-transform: uppercase;
+            font-weight: 600;
+        }
+
+        .stat-icon {
+            width: 40px;
+            height: 40px;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+        }
+
+        .stat-value {
+            font-size: 32px;
+            font-weight: 700;
+            color: #333;
+            margin-bottom: 8px;
+        }
+
+        .stat-change {
+            font-size: 13px;
+            color: #10b981;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .stat-change.negative {
+            color: #ef4444;
+        }
+
+        .card {
+            background: white;
+            border-radius: 12px;
+            padding: 25px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+            border: 1px solid #e0e0e0;
+            margin-bottom: 20px;
+        }
+
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 1px solid #e0e0e0;
+        }
+
+        .card-title {
+            font-size: 18px;
+            font-weight: 600;
+            color: #333;
+        }
+
+        .btn {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .btn:hover {
+            background: #5568d3;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+        }
+
+        .btn-secondary {
+            background: #f0f4ff;
+            color: #667eea;
+        }
+
+        .btn-secondary:hover {
+            background: #e0e7ff;
+        }
+
+        .table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .table th {
+            text-align: left;
+            padding: 12px;
+            font-size: 12px;
+            font-weight: 600;
+            color: #666;
+            text-transform: uppercase;
+            border-bottom: 2px solid #e0e0e0;
+        }
+
+        .table td {
+            padding: 15px 12px;
+            border-bottom: 1px solid #f0f0f0;
+            color: #333;
+            font-size: 14px;
+        }
+
+        .table tr:hover {
+            background: #f9fafb;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .badge.success {
+            background: #d1fae5;
+            color: #065f46;
+        }
+
+        .badge.warning {
+            background: #fef3c7;
+            color: #92400e;
+        }
+
+        .badge.danger {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+
+        .badge.info {
+            background: #dbeafe;
+            color: #1e40af;
+        }
+
+        .action-buttons {
+            display: flex;
+            gap: 8px;
+        }
+
+        .icon-btn {
+            width: 32px;
+            height: 32px;
+            border-radius: 6px;
+            border: none;
+            background: #f0f4ff;
+            color: #667eea;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s;
+        }
+
+        .icon-btn:hover {
+            background: #667eea;
+            color: white;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: #999;
+        }
+
+        .empty-state-icon {
+            font-size: 48px;
+            margin-bottom: 15px;
+            opacity: 0.3;
+        }
+
+        .tabs {
+            display: flex;
+            gap: 5px;
+            border-bottom: 2px solid #e0e0e0;
+            margin-bottom: 20px;
+        }
+
+        .tab {
+            padding: 12px 24px;
+            cursor: pointer;
+            border-bottom: 2px solid transparent;
+            margin-bottom: -2px;
+            color: #666;
+            font-weight: 500;
+            transition: all 0.2s;
+        }
+
+        .tab:hover {
+            color: #667eea;
+        }
+
+        .tab.active {
+            color: #667eea;
+            border-bottom-color: #667eea;
+            font-weight: 600;
+        }
+
+        .chart-placeholder {
+            height: 300px;
+            background: linear-gradient(135deg, #f0f4ff 0%, #e0e7ff 100%);
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #667eea;
+            font-weight: 600;
+        }
+
+        .quick-actions {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 30px;
+        }
+
+        .quick-action {
+            background: white;
+            padding: 20px;
+            border-radius: 12px;
+            border: 2px dashed #e0e0e0;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-align: center;
+        }
+
+        .quick-action:hover {
+            border-color: #667eea;
+            background: #f0f4ff;
+        }
+
+        .quick-action-icon {
+            font-size: 32px;
+            margin-bottom: 10px;
+        }
+
+        .quick-action-label {
+            font-weight: 600;
+            color: #333;
+        }
+
+        .notification-badge {
+            background: #ef4444;
+            color: white;
+            font-size: 11px;
+            padding: 2px 6px;
+            border-radius: 10px;
+            font-weight: 600;
+        }
+
+        @media (max-width: 768px) {
+            .sidebar {
+                width: 70px;
+            }
+
+            .nav-item span {
+                display: none;
+            }
+
+            .nav-section {
+                display: none;
+            }
+
+            .stats-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Top Bar -->
+    <div class="topbar">
+        <h1>🚀 Sistema SaaS Multi-Tenant</h1>
+        <div class="user-menu">
+            <span style="color: #666; font-size: 14px;">Clínica Sorriso</span>
+            <div class="user-avatar">CS</div>
+        </div>
+    </div>
+
+    <div class="container">
+        <!-- Sidebar -->
+        <div class="sidebar">
+            <div class="nav-item active">
+                <span class="nav-icon">📊</span>
+                <span>Dashboard</span>
+            </div>
+            
+            <div class="nav-section">Gestão</div>
+            
+            <div class="nav-item">
+                <span class="nav-icon">🤖</span>
+                <span>Agentes IA</span>
+            </div>
+            <div class="nav-item">
+                <span class="nav-icon">📚</span>
+                <span>Base de Conhecimento</span>
+            </div>
+            <div class="nav-item">
+                <span class="nav-icon">🖼️</span>
+                <span>Acervo de Mídia</span>
+            </div>
+            <div class="nav-item">
+                <span class="nav-icon">💬</span>
+                <span>Conversas</span>
+                <span class="notification-badge">3</span>
+            </div>
+            <div class="nav-item">
+                <span class="nav-icon">📍</span>
+                <span>Localizações</span>
+            </div>
+
+            <div class="nav-section">Integrações</div>
+            
+            <div class="nav-item">
+                <span class="nav-icon">🔌</span>
+                <span>Chatwoot</span>
+            </div>
+            <div class="nav-item">
+                <span class="nav-icon">📱</span>
+                <span>WhatsApp</span>
+            </div>
+            <div class="nav-item">
+                <span class="nav-icon">📅</span>
+                <span>Google Calendar</span>
+            </div>
+
+            <div class="nav-section">Sistema</div>
+            
+            <div class="nav-item">
+                <span class="nav-icon">💰</span>
+                <span>Usage & Billing</span>
+            </div>
+            <div class="nav-item">
+                <span class="nav-icon">📊</span>
+                <span>Analytics</span>
+            </div>
+            <div class="nav-item">
+                <span class="nav-icon">⚙️</span>
+                <span>Configurações</span>
+            </div>
+        </div>
+
+        <!-- Main Content -->
+        <div class="main-content">
+            <div class="page-header">
+                <h2>📊 Dashboard</h2>
+                <p>Visão geral do sistema - Clínica Sorriso</p>
+            </div>
+
+            <!-- Stats Grid -->
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-header">
+                        <span class="stat-label">Conversas Hoje</span>
+                        <div class="stat-icon" style="background: #dbeafe; color: #1e40af;">💬</div>
+                    </div>
+                    <div class="stat-value">247</div>
+                    <div class="stat-change">
+                        ↑ 12% vs ontem
+                    </div>
+                </div>
+
+                <div class="stat-card">
+                    <div class="stat-header">
+                        <span class="stat-label">Mensagens</span>
+                        <div class="stat-icon" style="background: #d1fae5; color: #065f46;">📨</div>
+                    </div>
+                    <div class="stat-value">1.5k</div>
+                    <div class="stat-change">
+                        ↑ 8% vs ontem
+                    </div>
+                </div>
+
+                <div class="stat-card">
+                    <div class="stat-header">
+                        <span class="stat-label">Taxa Resolução</span>
+                        <div class="stat-icon" style="background: #fef3c7; color: #92400e;">✅</div>
+                    </div>
+                    <div class="stat-value">98%</div>
+                    <div class="stat-change">
+                        ↑ 2% vs mês passado
+                    </div>
+                </div>
+
+                <div class="stat-card">
+                    <div class="stat-header">
+                        <span class="stat-label">Custo API</span>
+                        <div class="stat-icon" style="background: #fee2e2; color: #991b1b;">💰</div>
+                    </div>
+                    <div class="stat-value">$12.34</div>
+                    <div class="stat-change negative">
+                        ↑ 15% vs ontem
+                    </div>
+                </div>
+            </div>
+
+            <!-- Quick Actions -->
+            <div class="quick-actions">
+                <div class="quick-action">
+                    <div class="quick-action-icon">🤖</div>
+                    <div class="quick-action-label">Criar Agente</div>
+                </div>
+                <div class="quick-action">
+                    <div class="quick-action-icon">📤</div>
+                    <div class="quick-action-label">Upload RAG</div>
+                </div>
+                <div class="quick-action">
+                    <div class="quick-action-icon">💬</div>
+                    <div class="quick-action-label">Ver Conversas</div>
+                </div>
+                <div class="quick-action">
+                    <div class="quick-action-icon">📊</div>
+                    <div class="quick-action-label">Gerar Relatório</div>
+                </div>
+            </div>
+
+            <!-- Agents Card -->
+            <div class="card">
+                <div class="card-header">
+                    <h3 class="card-title">🤖 Agentes Ativos</h3>
+                    <button class="btn">
+                        <span>+</span> Novo Agente
+                    </button>
+                </div>
+
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Nome</th>
+                            <th>Status</th>
+                            <th>Modelo LLM</th>
+                            <th>Conversas (hoje)</th>
+                            <th>Custo</th>
+                            <th>Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>Atendimento Geral</strong></td>
+                            <td><span class="badge success">✓ Ativo</span></td>
+                            <td>GPT-4o-mini</td>
+                            <td>187</td>
+                            <td>$8.45</td>
+                            <td>
+                                <div class="action-buttons">
+                                    <button class="icon-btn" title="Editar">✏️</button>
+                                    <button class="icon-btn" title="Testar">🧪</button>
+                                    <button class="icon-btn" title="Estatísticas">📊</button>
+                                </div>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td><strong>Agendamentos</strong></td>
+                            <td><span class="badge success">✓ Ativo</span></td>
+                            <td>Gemini 2.0 Flash</td>
+                            <td>60</td>
+                            <td>$2.10</td>
+                            <td>
+                                <div class="action-buttons">
+                                    <button class="icon-btn" title="Editar">✏️</button>
+                                    <button class="icon-btn" title="Testar">🧪</button>
+                                    <button class="icon-btn" title="Estatísticas">📊</button>
+                                </div>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td><strong>Vendas</strong></td>
+                            <td><span class="badge warning">⏸ Pausado</span></td>
+                            <td>GPT-4o</td>
+                            <td>0</td>
+                            <td>$0.00</td>
+                            <td>
+                                <div class="action-buttons">
+                                    <button class="icon-btn" title="Editar">✏️</button>
+                                    <button class="icon-btn" title="Testar">🧪</button>
+                                    <button class="icon-btn" title="Estatísticas">📊</button>
+                                </div>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Chart Card -->
+            <div class="card">
+                <div class="card-header">
+                    <h3 class="card-title">📈 Conversas nos Últimos 7 Dias</h3>
+                    <div style="display: flex; gap: 10px;">
+                        <button class="btn btn-secondary">7 dias</button>
+                        <button class="btn btn-secondary">30 dias</button>
+                        <button class="btn btn-secondary">Exportar</button>
+                    </div>
+                </div>
+                <div class="chart-placeholder">
+                    📊 Gráfico de Linha - Conversas ao Longo do Tempo<br>
+                    <small>(Integração com Recharts/Chart.js)</small>
+                </div>
+            </div>
+
+            <!-- Recent Conversations -->
+            <div class="card">
+                <div class="card-header">
+                    <h3 class="card-title">💬 Conversas Recentes</h3>
+                    <button class="btn btn-secondary">Ver Todas</button>
+                </div>
+
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Cliente</th>
+                            <th>Agente</th>
+                            <th>Última Mensagem</th>
+                            <th>Status</th>
+                            <th>Tempo</th>
+                            <th>Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>Maria Silva</strong><br><small>+55 11 98765-4321</small></td>
+                            <td>Atendimento Geral</td>
+                            <td>Gostaria de agendar uma consulta...</td>
+                            <td><span class="badge success">✓ Resolvido</span></td>
+                            <td>2 min atrás</td>
+                            <td>
+                                <button class="icon-btn" title="Ver Conversa">👁️</button>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td><strong>João Santos</strong><br><small>+55 11 91234-5678</small></td>
+                            <td>Agendamentos</td>
+                            <td>Qual o horário disponível?</td>
+                            <td><span class="badge info">⏳ Aguardando</span></td>
+                            <td>5 min atrás</td>
+                            <td>
+                                <button class="icon-btn" title="Ver Conversa">👁️</button>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td><strong>Ana Costa</strong><br><small>+55 11 99876-5432</small></td>
+                            <td>Atendimento Geral</td>
+                            <td>Obrigada pelo atendimento!</td>
+                            <td><span class="badge success">✓ Resolvido</span></td>
+                            <td>15 min atrás</td>
+                            <td>
+                                <button class="icon-btn" title="Ver Conversa">👁️</button>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Simular interatividade
+        document.querySelectorAll('.nav-item').forEach(item => {
+            item.addEventListener('click', function() {
+                document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
+                this.classList.add('active');
+            });
+        });
+
+        document.querySelectorAll('.btn, .icon-btn, .quick-action').forEach(btn => {
+            btn.addEventListener('click', function() {
+                alert('🚀 Funcionalidade: ' + (this.title || this.textContent.trim()) + '\n\nEsta é uma demonstração visual. No sistema real, isso abriria a funcionalidade correspondente.');
+            });
+        });
+
+        // Simulação de dados em tempo real
+        setInterval(() => {
+            const conversas = document.querySelector('.stat-value');
+            if (conversas) {
+                const atual = parseInt(conversas.textContent);
+                conversas.textContent = atual + Math.floor(Math.random() * 3);
+            }
+        }, 5000);
+    </script>
+</body>
+</html>
