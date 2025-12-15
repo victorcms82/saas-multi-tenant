@@ -1,0 +1,188 @@
+[
+  {
+    "id": "073a171f-90a3-4389-96aa-4e1251fabbdc",
+    "last_sign_in_at": null,
+    "created_at": "2025-11-20T21:36:11.20851Z",
+    "user_metadata": {
+      "email_verified": true,
+      "full_name": "Admin Sucesso"
+    },
+    "email_confirmed_at": "2025-11-20T21:36:11.212616Z",
+    "email": "admin.sucesso@teste.com",
+    "app_metadata": {
+      "provider": "email",
+      "providers": [
+        "email"
+      ]
+    }
+  },
+  {
+    "id": "0c65a4df-e052-4240-9860-fe941c3da9b8",
+    "last_sign_in_at": null,
+    "created_at": "2025-11-20T21:34:41.578842Z",
+    "user_metadata": {
+      "email_verified": true,
+      "full_name": "Admin Final 4"
+    },
+    "email_confirmed_at": "2025-11-20T21:34:41.583777Z",
+    "email": "admin.final4@teste.com",
+    "app_metadata": {
+      "provider": "email",
+      "providers": [
+        "email"
+      ]
+    }
+  },
+  {
+    "id": "69189b4f-1cfe-4473-830f-38c1c0b044d1",
+    "last_sign_in_at": null,
+    "created_at": "2025-11-20T21:33:17.120955Z",
+    "user_metadata": {
+      "email_verified": true,
+      "full_name": "Admin Perfeito"
+    },
+    "email_confirmed_at": "2025-11-20T21:33:17.126329Z",
+    "email": "admin.perfeito@teste.com",
+    "app_metadata": {
+      "provider": "email",
+      "providers": [
+        "email"
+      ]
+    }
+  },
+  {
+    "id": "09a32ffd-a8bd-41af-8c8e-47734173a203",
+    "last_sign_in_at": null,
+    "created_at": "2025-11-20T21:30:44.842907Z",
+    "user_metadata": {
+      "email_verified": true,
+      "full_name": "Admin Final 3"
+    },
+    "email_confirmed_at": "2025-11-20T21:30:44.851643Z",
+    "email": "admin.final3@teste.com",
+    "app_metadata": {
+      "provider": "email",
+      "providers": [
+        "email"
+      ]
+    }
+  },
+  {
+    "id": "6bb1318e-47f9-4321-842e-fedeaa33b97d",
+    "last_sign_in_at": null,
+    "created_at": "2025-11-20T21:26:36.812902Z",
+    "user_metadata": {
+      "email_verified": true,
+      "full_name": "Admin Teste 2"
+    },
+    "email_confirmed_at": "2025-11-20T21:26:36.818144Z",
+    "email": "admin.teste2@exemplo.com",
+    "app_metadata": {
+      "provider": "email",
+      "providers": [
+        "email"
+      ]
+    }
+  },
+  {
+    "id": "87ff6b3c-beff-43f0-be04-e1109cbf8e1a",
+    "last_sign_in_at": null,
+    "created_at": "2025-11-20T21:24:48.144164Z",
+    "user_metadata": {
+      "email_verified": true,
+      "full_name": "Admin Script"
+    },
+    "email_confirmed_at": "2025-11-20T21:24:48.193001Z",
+    "email": "admin.script@teste.com",
+    "app_metadata": {
+      "provider": "email",
+      "providers": [
+        "email"
+      ]
+    }
+  },
+  {
+    "id": "9ce43610-d10c-4fc2-9361-8f4366ddac2d",
+    "last_sign_in_at": null,
+    "created_at": "2025-11-20T21:15:03.502545Z",
+    "user_metadata": {
+      "email_verified": true
+    },
+    "email_confirmed_at": "2025-11-20T21:15:03.509343Z",
+    "email": "admin@010.com",
+    "app_metadata": {
+      "provider": "email",
+      "providers": [
+        "email"
+      ]
+    }
+  },
+  {
+    "id": "31993b5b-0cf9-4045-9934-b939e9581743",
+    "last_sign_in_at": null,
+    "created_at": "2025-11-20T21:14:21.020008Z",
+    "user_metadata": {
+      "email_verified": true,
+      "full_name": "Admin 5"
+    },
+    "email_confirmed_at": "2025-11-20T21:14:21.027288Z",
+    "email": "admin@teste5.com",
+    "app_metadata": {
+      "provider": "email",
+      "providers": [
+        "email"
+      ]
+    }
+  },
+  {
+    "id": "584711ad-8d4c-4b6d-ad90-8b896611c631",
+    "last_sign_in_at": null,
+    "created_at": "2025-11-20T21:13:28.514312Z",
+    "user_metadata": {
+      "email_verified": true,
+      "full_name": "Admin 4"
+    },
+    "email_confirmed_at": "2025-11-20T21:13:28.560756Z",
+    "email": "admin@teste4.com",
+    "app_metadata": {
+      "provider": "email",
+      "providers": [
+        "email"
+      ]
+    }
+  },
+  {
+    "id": "834ca53a-f772-4d17-a354-c7215f3f4535",
+    "last_sign_in_at": null,
+    "created_at": "2025-11-20T21:10:01.072911Z",
+    "user_metadata": {
+      "email_verified": true,
+      "full_name": "Dr. Carlos Teste"
+    },
+    "email_confirmed_at": "2025-11-20T21:10:01.115005Z",
+    "email": "admin@teste3.com",
+    "app_metadata": {
+      "provider": "email",
+      "providers": [
+        "email"
+      ]
+    }
+  },
+  {
+    "id": "c380c2bb-2f08-4974-8e63-1b491ddaeb85",
+    "last_sign_in_at": "2025-11-25T09:36:56.954059Z",
+    "created_at": "2025-11-19T13:45:07.708776Z",
+    "user_metadata": {
+      "email_verified": true,
+      "full_name": "Victor Castro Marques dos Santos"
+    },
+    "email_confirmed_at": "2025-11-19T13:45:07.747226Z",
+    "email": "victor@evolutedigital.com.br",
+    "app_metadata": {
+      "provider": "email",
+      "providers": [
+        "email"
+      ]
+    }
+  }
+]

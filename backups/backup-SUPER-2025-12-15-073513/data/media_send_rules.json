@@ -1,0 +1,78 @@
+[
+  {
+    "id": "4689043e-3168-4fe4-9353-cefeead59266",
+    "client_id": "clinica_sorriso_001",
+    "agent_id": "default",
+    "rule_type": "keyword_trigger",
+    "rule_name": "Enviar foto consultório quando perguntar",
+    "keywords": [
+      "consultório",
+      "consultorio",
+      "ambiente",
+      "onde fica",
+      "local"
+    ],
+    "match_type": "contains",
+    "message_number": null,
+    "message_range": null,
+    "llm_prompt": null,
+    "media_id": "fd9f3ef5-ea69-4b34-bfdb-164dae555e8e",
+    "priority": 1,
+    "is_active": true,
+    "send_once": false,
+    "cooldown_hours": null,
+    "created_at": "2025-11-07T13:55:18.071783-03:00",
+    "updated_at": "2025-11-07T13:55:18.071783-03:00"
+  },
+  {
+    "id": "189b90d6-e6f5-4300-97ae-8e08d1b5839b",
+    "client_id": "clinica_sorriso_001",
+    "agent_id": "default",
+    "rule_type": "keyword_trigger",
+    "rule_name": "Enviar foto equipe quando perguntar",
+    "keywords": [
+      "equipe",
+      "time",
+      "dentistas",
+      "profissionais",
+      "quem atende"
+    ],
+    "match_type": "contains",
+    "message_number": null,
+    "message_range": null,
+    "llm_prompt": null,
+    "media_id": "aa6192a6-7ece-4d76-b848-095230541076",
+    "priority": 2,
+    "is_active": true,
+    "send_once": false,
+    "cooldown_hours": null,
+    "created_at": "2025-11-07T13:55:18.071783-03:00",
+    "updated_at": "2025-11-07T13:55:18.071783-03:00"
+  },
+  {
+    "id": "001cacbb-32ac-4659-85b9-ab5999f84718",
+    "client_id": "clinica_sorriso_001",
+    "agent_id": "default",
+    "rule_type": "keyword_trigger",
+    "rule_name": "Enviar tabela de preços quando perguntar",
+    "keywords": [
+      "preço",
+      "preco",
+      "valor",
+      "quanto custa",
+      "tabela",
+      "valores"
+    ],
+    "match_type": "contains",
+    "message_number": null,
+    "message_range": null,
+    "llm_prompt": null,
+    "media_id": "79392534-425a-40c8-a201-cb028a1cc38f",
+    "priority": 3,
+    "is_active": true,
+    "send_once": false,
+    "cooldown_hours": null,
+    "created_at": "2025-11-07T13:55:18.071783-03:00",
+    "updated_at": "2025-11-07T13:55:18.071783-03:00"
+  }
+]

@@ -1,0 +1,75 @@
+{
+  "total_categories": 12,
+  "backup_date": "2025-12-15 07:35:16",
+  "total_functions": 44,
+  "categories": {
+    "Messaging": [
+      "send_message",
+      "receive_message",
+      "process_webhook"
+    ],
+    "Integrations": [
+      "sync_chatwoot",
+      "sync_evolution"
+    ],
+    "Onboarding": [
+      "onboard_new_client",
+      "create_new_client",
+      "create_client_admin",
+      "link_auth_to_dashboard",
+      "create_default_agent",
+      "change_my_password"
+    ],
+    "Audit/Security": [
+      "check_access",
+      "log_action",
+      "get_audit_logs"
+    ],
+    "Stats/Analytics": [
+      "get_client_stats",
+      "get_agent_stats",
+      "get_conversation_stats"
+    ],
+    "Media": [
+      "get_media_rules",
+      "apply_media_rule",
+      "send_media"
+    ],
+    "Locations": [
+      "get_locations",
+      "update_location",
+      "create_location"
+    ],
+    "CRUD Operations": [
+      "search_conversations",
+      "update_client",
+      "update_agent",
+      "delete_client",
+      "delete_agent",
+      "get_user_permissions"
+    ],
+    "Chat/Conversas": [
+      "send_human_message",
+      "takeover_conversation",
+      "return_to_ai"
+    ],
+    "Memory": [
+      "get_memory",
+      "save_memory",
+      "clear_memory"
+    ],
+    "RAG/Knowledge": [
+      "get_rag_context",
+      "search_rag",
+      "add_rag_document",
+      "update_rag_document",
+      "delete_rag_document"
+    ],
+    "Super Admin": [
+      "is_super_admin",
+      "get_all_clients",
+      "get_all_agents",
+      "get_global_conversations"
+    ]
+  }
+}
