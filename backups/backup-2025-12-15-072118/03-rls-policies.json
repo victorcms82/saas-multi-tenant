@@ -1,0 +1,10 @@
+{
+  "tables_with_rls": [
+    "clients",
+    "dashboard_users",
+    "agents",
+    "conversations",
+    "messages"
+  ],
+  "note": "RLS policies estão ativas nas tabelas"
+}

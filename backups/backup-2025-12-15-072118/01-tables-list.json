@@ -1,0 +1,16 @@
+[
+  "clients",
+  "dashboard_users",
+  "agents",
+  "conversations",
+  "messages",
+  "conversation_memory",
+  "memory_config",
+  "audit_logs",
+  "webhooks_config",
+  "media_files",
+  "conversation_participants",
+  "location_hierarchy",
+  "channel_configs",
+  "ai_prompts"
+]

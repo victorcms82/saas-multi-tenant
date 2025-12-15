@@ -1,0 +1,13 @@
+{
+  "id": "45e8cfdb-1308-453a-b02c-8ab76a1fa201",
+  "created_at": "2025-10-29T08:58:11.992717-03:00",
+  "service": "Chatwoot",
+  "purpose": "Gestor de Agente",
+  "n8n_workflow_id": "",
+  "path": "gestor-ia/chatwoot",
+  "parameters": {
+    "client_id": "required"
+  },
+  "notes": "Webhook principal para todos os clientes Chatwoot",
+  "environment": "production"
+}

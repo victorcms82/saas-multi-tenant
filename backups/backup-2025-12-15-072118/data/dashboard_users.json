@@ -1,0 +1,255 @@
+[
+  {
+    "id": "c380c2bb-2f08-4974-8e63-1b491ddaeb85",
+    "client_id": "clinica_sorriso_001",
+    "full_name": "Victor Castro Marques dos Santos",
+    "email": "victor@evolutedigital.com.br",
+    "phone": null,
+    "avatar_url": null,
+    "role": "super_admin",
+    "preferences": {
+      "theme": "light",
+      "language": "pt-BR",
+      "notifications": {
+        "sound": true,
+        "browser": true,
+        "whatsapp": false,
+        "email_digest": true
+      }
+    },
+    "is_active": true,
+    "last_login_at": null,
+    "created_at": "2025-11-19T10:47:23.108441-03:00",
+    "updated_at": "2025-11-20T17:20:01.446308-03:00"
+  },
+  {
+    "id": "834ca53a-f772-4d17-a354-c7215f3f4535",
+    "client_id": "clinica_teste_003",
+    "full_name": "Dr. Carlos Teste",
+    "email": "admin@teste3.com",
+    "phone": null,
+    "avatar_url": null,
+    "role": "admin",
+    "preferences": {
+      "theme": "light",
+      "language": "pt-BR",
+      "notifications": {
+        "sound": true,
+        "browser": true,
+        "whatsapp": false,
+        "email_digest": true
+      }
+    },
+    "is_active": true,
+    "last_login_at": null,
+    "created_at": "2025-11-20T18:10:01.308453-03:00",
+    "updated_at": "2025-11-20T18:10:01.308453-03:00"
+  },
+  {
+    "id": "584711ad-8d4c-4b6d-ad90-8b896611c631",
+    "client_id": "clinica_teste_004",
+    "full_name": "Admin 4",
+    "email": "admin@teste4.com",
+    "phone": null,
+    "avatar_url": null,
+    "role": "admin",
+    "preferences": {
+      "theme": "light",
+      "language": "pt-BR",
+      "notifications": {
+        "sound": true,
+        "browser": true,
+        "whatsapp": false,
+        "email_digest": true
+      }
+    },
+    "is_active": true,
+    "last_login_at": null,
+    "created_at": "2025-11-20T18:13:28.973163-03:00",
+    "updated_at": "2025-11-20T18:13:28.973163-03:00"
+  },
+  {
+    "id": "31993b5b-0cf9-4045-9934-b939e9581743",
+    "client_id": "clinica_teste_005",
+    "full_name": "Admin 5",
+    "email": "admin@teste5.com",
+    "phone": null,
+    "avatar_url": null,
+    "role": "admin",
+    "preferences": {
+      "theme": "light",
+      "language": "pt-BR",
+      "notifications": {
+        "sound": true,
+        "browser": true,
+        "whatsapp": false,
+        "email_digest": true
+      }
+    },
+    "is_active": true,
+    "last_login_at": null,
+    "created_at": "2025-11-20T18:14:21.164978-03:00",
+    "updated_at": "2025-11-20T18:14:21.164978-03:00"
+  },
+  {
+    "id": "9ce43610-d10c-4fc2-9361-8f4366ddac2d",
+    "client_id": "clinica_010",
+    "full_name": "Admin 10",
+    "email": "admin@010.com",
+    "phone": null,
+    "avatar_url": null,
+    "role": "admin",
+    "preferences": {
+      "theme": "light",
+      "language": "pt-BR",
+      "notifications": {
+        "sound": true,
+        "browser": true,
+        "whatsapp": false,
+        "email_digest": true
+      }
+    },
+    "is_active": true,
+    "last_login_at": null,
+    "created_at": "2025-11-20T18:15:03.610968-03:00",
+    "updated_at": "2025-11-20T18:15:03.610968-03:00"
+  },
+  {
+    "id": "87ff6b3c-beff-43f0-be04-e1109cbf8e1a",
+    "client_id": "teste_script_001",
+    "full_name": "Admin Script",
+    "email": "admin.script@teste.com",
+    "phone": null,
+    "avatar_url": null,
+    "role": "admin",
+    "preferences": {
+      "theme": "light",
+      "language": "pt-BR",
+      "notifications": {
+        "sound": true,
+        "browser": true,
+        "whatsapp": false,
+        "email_digest": true
+      }
+    },
+    "is_active": true,
+    "last_login_at": null,
+    "created_at": "2025-11-20T18:24:48.300922-03:00",
+    "updated_at": "2025-11-20T18:24:48.300922-03:00"
+  },
+  {
+    "id": "6bb1318e-47f9-4321-842e-fedeaa33b97d",
+    "client_id": "teste_novo_002",
+    "full_name": "Admin Teste 2",
+    "email": "admin.teste2@exemplo.com",
+    "phone": null,
+    "avatar_url": null,
+    "role": "admin",
+    "preferences": {
+      "theme": "light",
+      "language": "pt-BR",
+      "notifications": {
+        "sound": true,
+        "browser": true,
+        "whatsapp": false,
+        "email_digest": true
+      }
+    },
+    "is_active": true,
+    "last_login_at": null,
+    "created_at": "2025-11-20T18:26:36.920614-03:00",
+    "updated_at": "2025-11-20T18:26:36.920614-03:00"
+  },
+  {
+    "id": "09a32ffd-a8bd-41af-8c8e-47734173a203",
+    "client_id": "teste_final_003",
+    "full_name": "Admin Final 3",
+    "email": "admin.final3@teste.com",
+    "phone": null,
+    "avatar_url": null,
+    "role": "admin",
+    "preferences": {
+      "theme": "light",
+      "language": "pt-BR",
+      "notifications": {
+        "sound": true,
+        "browser": true,
+        "whatsapp": false,
+        "email_digest": true
+      }
+    },
+    "is_active": true,
+    "last_login_at": null,
+    "created_at": "2025-11-20T18:30:44.938805-03:00",
+    "updated_at": "2025-11-20T18:30:44.938805-03:00"
+  },
+  {
+    "id": "69189b4f-1cfe-4473-830f-38c1c0b044d1",
+    "client_id": "cliente_perfeito_001",
+    "full_name": "Admin Perfeito",
+    "email": "admin.perfeito@teste.com",
+    "phone": null,
+    "avatar_url": null,
+    "role": "admin",
+    "preferences": {
+      "theme": "light",
+      "language": "pt-BR",
+      "notifications": {
+        "sound": true,
+        "browser": true,
+        "whatsapp": false,
+        "email_digest": true
+      }
+    },
+    "is_active": true,
+    "last_login_at": null,
+    "created_at": "2025-11-20T18:33:17.214946-03:00",
+    "updated_at": "2025-11-20T18:33:17.214946-03:00"
+  },
+  {
+    "id": "0c65a4df-e052-4240-9860-fe941c3da9b8",
+    "client_id": "cliente_final_004",
+    "full_name": "Admin Final 4",
+    "email": "admin.final4@teste.com",
+    "phone": null,
+    "avatar_url": null,
+    "role": "admin",
+    "preferences": {
+      "theme": "light",
+      "language": "pt-BR",
+      "notifications": {
+        "sound": true,
+        "browser": true,
+        "whatsapp": false,
+        "email_digest": true
+      }
+    },
+    "is_active": true,
+    "last_login_at": null,
+    "created_at": "2025-11-20T18:34:41.687873-03:00",
+    "updated_at": "2025-11-20T18:34:41.687873-03:00"
+  },
+  {
+    "id": "073a171f-90a3-4389-96aa-4e1251fabbdc",
+    "client_id": "cliente_sucesso_001",
+    "full_name": "Admin Sucesso",
+    "email": "admin.sucesso@teste.com",
+    "phone": null,
+    "avatar_url": null,
+    "role": "admin",
+    "preferences": {
+      "theme": "light",
+      "language": "pt-BR",
+      "notifications": {
+        "sound": true,
+        "browser": true,
+        "whatsapp": false,
+        "email_digest": true
+      }
+    },
+    "is_active": true,
+    "last_login_at": null,
+    "created_at": "2025-11-20T18:36:11.310248-03:00",
+    "updated_at": "2025-11-20T18:36:11.310248-03:00"
+  }
+]

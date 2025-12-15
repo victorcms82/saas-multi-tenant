@@ -1,0 +1,454 @@
+[
+  {
+    "location_id": "bella_ipanema_001",
+    "client_id": "estetica_bella_rede",
+    "name": "Bella Ipanema",
+    "display_name": "Bella Estética - Unidade Ipanema",
+    "location_type": "aesthetic_clinic",
+    "address": "Rua Visconde de Pirajá, 580 - Sala 201",
+    "address_line_2": null,
+    "city": "Rio de Janeiro",
+    "state": "RJ",
+    "zip_code": "22410-002",
+    "country": "Brasil",
+    "latitude": null,
+    "longitude": null,
+    "phone": "+55 21 3333-2222",
+    "whatsapp_number": "+55 21 99999-2222",
+    "email": "ipanema@bellaestetica.com.br",
+    "website": null,
+    "chatwoot_inbox_id": null,
+    "chatwoot_account_id": 1,
+    "working_hours": [
+      {
+        "day": "monday",
+        "open": "08:00",
+        "close": "20:00",
+        "is_open": true
+      },
+      {
+        "day": "tuesday",
+        "open": "08:00",
+        "close": "20:00",
+        "is_open": true
+      },
+      {
+        "day": "wednesday",
+        "open": "08:00",
+        "close": "20:00",
+        "is_open": true
+      },
+      {
+        "day": "thursday",
+        "open": "08:00",
+        "close": "20:00",
+        "is_open": true
+      },
+      {
+        "day": "friday",
+        "open": "08:00",
+        "close": "20:00",
+        "is_open": true
+      },
+      {
+        "day": "saturday",
+        "open": "09:00",
+        "close": "15:00",
+        "is_open": true
+      },
+      {
+        "day": "sunday",
+        "open": "00:00",
+        "close": "00:00",
+        "is_open": false
+      }
+    ],
+    "timezone": "America/Sao_Paulo",
+    "services_offered": [
+      "limpeza_de_pele",
+      "peeling",
+      "harmonizacao_facial",
+      "botox",
+      "preenchimento",
+      "microagulhamento",
+      "laser",
+      "massagem_modeladora"
+    ],
+    "specialties": [
+      "tratamentos_corporais",
+      "massagens"
+    ],
+    "media_folder": "estetica_bella_rede/bella_ipanema_001/",
+    "logo_url": null,
+    "cover_image_url": null,
+    "gallery_images": [],
+    "capacity_info": {
+      "staff_count": 8,
+      "parking_spots": 0,
+      "consultation_rooms": 6
+    },
+    "amenities": [
+      "wifi",
+      "air_conditioning",
+      "wheelchair_access"
+    ],
+    "manager_name": "Beatriz Costa",
+    "manager_phone": null,
+    "manager_email": "beatriz.costa@bellaestetica.com.br",
+    "is_active": true,
+    "is_primary": false,
+    "settings": {},
+    "created_at": "2025-11-11T09:00:24.14556",
+    "updated_at": "2025-11-11T09:00:24.14556",
+    "created_by": null,
+    "updated_by": null
+  },
+  {
+    "location_id": "bella_copacabana_001",
+    "client_id": "estetica_bella_rede",
+    "name": "Bella Copacabana",
+    "display_name": "Bella Estética - Unidade Copacabana",
+    "location_type": "aesthetic_clinic",
+    "address": "Av. Nossa Senhora de Copacabana, 1234 - Sala 101",
+    "address_line_2": null,
+    "city": "Rio de Janeiro",
+    "state": "RJ",
+    "zip_code": "22070-011",
+    "country": "Brasil",
+    "latitude": null,
+    "longitude": null,
+    "phone": "+55 21 3333-3333",
+    "whatsapp_number": "+55 21 99999-3333",
+    "email": "copacabana@bellaestetica.com.br",
+    "website": null,
+    "chatwoot_inbox_id": null,
+    "chatwoot_account_id": 1,
+    "working_hours": [
+      {
+        "day": "monday",
+        "open": "09:00",
+        "close": "18:00",
+        "is_open": true
+      },
+      {
+        "day": "tuesday",
+        "open": "09:00",
+        "close": "18:00",
+        "is_open": true
+      },
+      {
+        "day": "wednesday",
+        "open": "09:00",
+        "close": "18:00",
+        "is_open": true
+      },
+      {
+        "day": "thursday",
+        "open": "09:00",
+        "close": "18:00",
+        "is_open": true
+      },
+      {
+        "day": "friday",
+        "open": "09:00",
+        "close": "18:00",
+        "is_open": true
+      },
+      {
+        "day": "saturday",
+        "open": "00:00",
+        "close": "00:00",
+        "is_open": false
+      },
+      {
+        "day": "sunday",
+        "open": "00:00",
+        "close": "00:00",
+        "is_open": false
+      }
+    ],
+    "timezone": "America/Sao_Paulo",
+    "services_offered": [
+      "limpeza_de_pele",
+      "peeling",
+      "botox",
+      "preenchimento"
+    ],
+    "specialties": [
+      "procedimentos_injetaveis"
+    ],
+    "media_folder": "estetica_bella_rede/bella_copacabana_001/",
+    "logo_url": null,
+    "cover_image_url": null,
+    "gallery_images": [],
+    "capacity_info": {
+      "staff_count": 3,
+      "parking_spots": 0,
+      "consultation_rooms": 3
+    },
+    "amenities": [
+      "wifi",
+      "air_conditioning"
+    ],
+    "manager_name": "Carla Santos",
+    "manager_phone": null,
+    "manager_email": "carla.santos@bellaestetica.com.br",
+    "is_active": true,
+    "is_primary": false,
+    "settings": {},
+    "created_at": "2025-11-11T09:00:24.14556",
+    "updated_at": "2025-11-11T09:00:24.14556",
+    "created_by": null,
+    "updated_by": null
+  },
+  {
+    "location_id": "bella_botafogo_001",
+    "client_id": "estetica_bella_rede",
+    "name": "Bella Botafogo",
+    "display_name": "Bella Estética - Unidade Botafogo",
+    "location_type": "aesthetic_clinic",
+    "address": "Rua Voluntários da Pátria, 89 - Sala 501",
+    "address_line_2": null,
+    "city": "Rio de Janeiro",
+    "state": "RJ",
+    "zip_code": "22270-000",
+    "country": "Brasil",
+    "latitude": null,
+    "longitude": null,
+    "phone": "+55 21 3333-4444",
+    "whatsapp_number": "+55 21 99999-4444",
+    "email": "botafogo@bellaestetica.com.br",
+    "website": null,
+    "chatwoot_inbox_id": null,
+    "chatwoot_account_id": 1,
+    "working_hours": [
+      {
+        "day": "monday",
+        "open": "08:00",
+        "close": "19:00",
+        "is_open": true
+      },
+      {
+        "day": "tuesday",
+        "open": "08:00",
+        "close": "19:00",
+        "is_open": true
+      },
+      {
+        "day": "wednesday",
+        "open": "08:00",
+        "close": "19:00",
+        "is_open": true
+      },
+      {
+        "day": "thursday",
+        "open": "08:00",
+        "close": "19:00",
+        "is_open": true
+      },
+      {
+        "day": "friday",
+        "open": "08:00",
+        "close": "19:00",
+        "is_open": true
+      },
+      {
+        "day": "saturday",
+        "open": "09:00",
+        "close": "13:00",
+        "is_open": true
+      },
+      {
+        "day": "sunday",
+        "open": "00:00",
+        "close": "00:00",
+        "is_open": false
+      }
+    ],
+    "timezone": "America/Sao_Paulo",
+    "services_offered": [
+      "limpeza_de_pele",
+      "peeling",
+      "harmonizacao_facial",
+      "botox",
+      "preenchimento",
+      "microagulhamento",
+      "laser",
+      "depilacao_laser"
+    ],
+    "specialties": [
+      "depilacao_laser",
+      "tratamentos_faciais"
+    ],
+    "media_folder": "estetica_bella_rede/bella_botafogo_001/",
+    "logo_url": null,
+    "cover_image_url": null,
+    "gallery_images": [],
+    "capacity_info": {
+      "staff_count": 6,
+      "parking_spots": 3,
+      "consultation_rooms": 5
+    },
+    "amenities": [
+      "wifi",
+      "air_conditioning",
+      "wheelchair_access",
+      "parking"
+    ],
+    "manager_name": "Daniel Oliveira",
+    "manager_phone": null,
+    "manager_email": "daniel.oliveira@bellaestetica.com.br",
+    "is_active": true,
+    "is_primary": false,
+    "settings": {},
+    "created_at": "2025-11-11T09:00:24.14556",
+    "updated_at": "2025-11-11T09:00:24.14556",
+    "created_by": null,
+    "updated_by": null
+  },
+  {
+    "location_id": "bella_barra_001",
+    "client_id": "estetica_bella_rede",
+    "name": "Bella Barra",
+    "display_name": "Bella Estética - Unidade Barra",
+    "location_type": "aesthetic_clinic",
+    "address": "Av. das Américas, 5000 - Sala 301",
+    "address_line_2": null,
+    "city": "Rio de Janeiro",
+    "state": "RJ",
+    "zip_code": "22640-102",
+    "country": "Brasil",
+    "latitude": null,
+    "longitude": null,
+    "phone": "+55 21 3333-1111",
+    "whatsapp_number": "+55 21 99999-1111",
+    "email": "barra@bellaestetica.com.br",
+    "website": null,
+    "chatwoot_inbox_id": 3,
+    "chatwoot_account_id": 1,
+    "working_hours": [
+      {
+        "day": "monday",
+        "open": "09:00",
+        "close": "19:00",
+        "is_open": true
+      },
+      {
+        "day": "tuesday",
+        "open": "09:00",
+        "close": "19:00",
+        "is_open": true
+      },
+      {
+        "day": "wednesday",
+        "open": "09:00",
+        "close": "19:00",
+        "is_open": true
+      },
+      {
+        "day": "thursday",
+        "open": "09:00",
+        "close": "19:00",
+        "is_open": true
+      },
+      {
+        "day": "friday",
+        "open": "09:00",
+        "close": "19:00",
+        "is_open": true
+      },
+      {
+        "day": "saturday",
+        "open": "09:00",
+        "close": "14:00",
+        "is_open": true
+      },
+      {
+        "day": "sunday",
+        "open": "00:00",
+        "close": "00:00",
+        "is_open": false
+      }
+    ],
+    "timezone": "America/Sao_Paulo",
+    "services_offered": [
+      "limpeza_de_pele",
+      "peeling",
+      "harmonizacao_facial",
+      "botox",
+      "preenchimento",
+      "microagulhamento",
+      "laser"
+    ],
+    "specialties": [
+      "harmonizacao_facial",
+      "procedimentos_injetaveis"
+    ],
+    "media_folder": "estetica_bella_rede/bella_barra_001/",
+    "logo_url": null,
+    "cover_image_url": null,
+    "gallery_images": [],
+    "capacity_info": {
+      "staff_count": 5,
+      "parking_spots": 2,
+      "consultation_rooms": 4
+    },
+    "amenities": [
+      "wifi",
+      "air_conditioning",
+      "wheelchair_access",
+      "parking"
+    ],
+    "manager_name": "Ana Paula Silva",
+    "manager_phone": null,
+    "manager_email": "ana.silva@bellaestetica.com.br",
+    "is_active": true,
+    "is_primary": true,
+    "settings": {},
+    "created_at": "2025-11-11T09:00:24.14556",
+    "updated_at": "2025-11-11T14:51:51.927096",
+    "created_by": null,
+    "updated_by": null
+  },
+  {
+    "location_id": "sorriso_matriz_001",
+    "client_id": "clinica_sorriso_001",
+    "name": "Clinica Sorriso Matriz",
+    "display_name": null,
+    "location_type": null,
+    "address": "Av. Principal, 123 - Centro",
+    "address_line_2": null,
+    "city": null,
+    "state": null,
+    "zip_code": null,
+    "country": "Brasil",
+    "latitude": null,
+    "longitude": null,
+    "phone": "+55 21 98765-4321",
+    "whatsapp_number": null,
+    "email": "contato@clinicasorriso.com.br",
+    "website": null,
+    "chatwoot_inbox_id": 2,
+    "chatwoot_account_id": null,
+    "working_hours": [],
+    "timezone": "America/Sao_Paulo",
+    "services_offered": [],
+    "specialties": [],
+    "media_folder": null,
+    "logo_url": null,
+    "cover_image_url": null,
+    "gallery_images": [],
+    "capacity_info": {},
+    "amenities": [],
+    "manager_name": null,
+    "manager_phone": null,
+    "manager_email": null,
+    "is_active": true,
+    "is_primary": false,
+    "settings": {},
+    "created_at": "2025-11-11T22:00:55.491189",
+    "updated_at": "2025-11-27T13:59:26.432537",
+    "created_by": null,
+    "updated_by": null
+  }
+]

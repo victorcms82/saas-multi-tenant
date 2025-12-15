@@ -1,0 +1,50 @@
+[
+  {
+    "name": "is_super_admin",
+    "exists": true
+  },
+  {
+    "name": "get_all_clients",
+    "exists": true
+  },
+  {
+    "name": "get_all_agents",
+    "exists": true
+  },
+  {
+    "name": "get_global_conversations",
+    "exists": true
+  },
+  {
+    "name": "create_new_client",
+    "exists": true
+  },
+  {
+    "name": "create_client_admin",
+    "exists": true
+  },
+  {
+    "name": "link_auth_to_dashboard",
+    "exists": true
+  },
+  {
+    "name": "create_default_agent",
+    "exists": true
+  },
+  {
+    "name": "change_my_password",
+    "exists": true
+  },
+  {
+    "name": "send_human_message",
+    "exists": true
+  },
+  {
+    "name": "takeover_conversation",
+    "exists": true
+  },
+  {
+    "name": "return_to_ai",
+    "exists": true
+  }
+]
