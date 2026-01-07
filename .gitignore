@@ -2,3 +2,24 @@
 node_modules/
 *.log
 .DS_Store
+
+# Backups, dumps e artefatos sensíveis
+backups/
+SNAPSHOT_*/
+SNAPSHOT_PRE_MIGRACAO_V2_2026/
+dumps/
+supabase_data/
+supabase_data/**
+*.dump
+supabase_data.sql
+supabase_schema.sql
+supabase_full.dump
+*.env
+.env.*
+Supabase/supabase-schema-*.png
+Supabase/**/api-export/
+Supabase/**/auth-export/
+Supabase/**/storage-export/
+Supabase/**/db-export/
+Supabase/**/backups/
+Supabase/**/snapshots/
